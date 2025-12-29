@@ -9,6 +9,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { inject } from '@vercel/analytics';
 
 // ──────────────────────────────────────────────────────────────
 // Assets
@@ -32,6 +33,11 @@ export default function RootLayout() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        // Initialize Vercel Web Analytics (only on web)
+        if (typeof window !== 'undefined') {
+          inject();
+        }
+
         // 1. Load Onboarding Status
         const onboardingValue = await AsyncStorage.getItem('hasSeenOnboarding');
         setHasSeenOnboarding(onboardingValue === 'true');
