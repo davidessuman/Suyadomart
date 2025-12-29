@@ -197,7 +197,7 @@ type DateSelection = {
 
 // === WEB APP PRODUCT LINK GENERATOR ===
 const generateProductWebLink = (product: Product): string => {
-  const WEB_APP_DOMAIN = 'https://suyadomart-pl2b.vercel.app/';
+  const WEB_APP_DOMAIN = 'https://suyadomart.vercel.app//';
  
   const params = new URLSearchParams({
     productId: product.id,
@@ -1428,7 +1428,7 @@ const ShareModal: React.FC<{
           }]}>
             <Text style={[styles.productLinkLabel, { color: theme.primary }]}>Product Web Link:</Text>
             <Text style={[styles.productLinkExample, { color: theme.textTertiary }]}>
-              https://suyadomart-pl2b.vercel.app//?productId={product.id.substring(0, 8)}...
+              https://suyadomart.vercel.app///?productId={product.id.substring(0, 8)}...
             </Text>
             <TouchableOpacity
               style={[styles.productLinkButton, { backgroundColor: theme.surface }]}
