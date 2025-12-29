@@ -10,9 +10,6 @@ import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Vercel Speed Insights Integration
-import { SpeedInsights } from "@vercel/speed-insights/next";
-
 // ──────────────────────────────────────────────────────────────
 // Assets
 // ──────────────────────────────────────────────────────────────
@@ -88,14 +85,18 @@ export default function RootLayout() {
 
       // 2. Unauthenticated User
       if (!hasSeenOnboarding) {
+        // CRITICAL FIX:
+        // If local state says they haven't seen onboarding, but they are trying to access Auth,
+        // let's double-check Storage. They might have JUST clicked "Get Started".
         if (inAuth) {
             const checkAgain = await AsyncStorage.getItem('hasSeenOnboarding');
             if (checkAgain === 'true') {
-                setHasSeenOnboarding(true); 
-                return; 
+                setHasSeenOnboarding(true); // Update state so we don't check again
+                return; // Allow them to stay on /auth
             }
         }
 
+        // If truly hasn't seen it, force back to onboarding
         if (!inOnboarding) router.replace('/onboarding');
         return;
       }
@@ -123,10 +124,6 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <StatusBar style="auto" />
-      
-      {/* Vercel Speed Insights Component added here */}
-      <SpeedInsights />
-      
     </ThemeProvider>
   );
 }
