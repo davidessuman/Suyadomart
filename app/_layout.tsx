@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Vercel Speed Insights Integration
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // ──────────────────────────────────────────────────────────────
 // Assets
