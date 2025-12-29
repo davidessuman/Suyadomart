@@ -9,6 +9,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import SpeedInsightsWrapper from '@/components/SpeedInsightsWrapper';
 
 // ──────────────────────────────────────────────────────────────
 // Assets
@@ -124,6 +125,7 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       <StatusBar style="auto" />
+      <SpeedInsightsWrapper />
     </ThemeProvider>
   );
 }
