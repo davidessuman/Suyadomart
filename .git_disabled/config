@@ -1,0 +1,15 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+[remote "origin"]
+	url = https://github.com/davidessuman/Suyadomart.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	gk-last-accessed = 2025-12-31T11:51:48.988Z
+	gk-last-modified = 2025-12-31T11:51:48.988Z
+	remote = origin
+	merge = refs/heads/main
+	vscode-merge-base = origin/main
