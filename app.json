@@ -1,5 +1,6 @@
 {
   "expo": {
+    "platforms": ["ios", "android", "web"],
     "name": "Suyado-campus",
     "slug": "Suyado-campus",
     "version": "1.0.0",
