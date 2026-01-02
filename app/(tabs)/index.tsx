@@ -217,7 +217,7 @@ const getStatusColor = (status: string, theme: any) => {
     case 'processing': return theme.info;
     case 'completed': return theme.success;
     case 'cancelled': return theme.error;
-    case 'shipped': return '#5856D6';
+    case 'shipped': return '#302e9fff';
     default: return theme.textTertiary;
   }
 };
@@ -228,7 +228,6 @@ const getStatusText = (status: string) => {
     case 'processing': return 'Processing';
     case 'completed': return 'Completed';
     case 'cancelled': return 'Cancelled';
-    case 'shipped': return 'Shipped';
     default: return status;
   }
 };
