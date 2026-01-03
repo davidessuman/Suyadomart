@@ -41,143 +41,60 @@ const DARK_BACKGROUND = '#121212';
 const LIGHT_TEXT = '#333333';
 const DARK_TEXT = '#FFFFFF';
 
-// === CUSTOM ALERT SYSTEM ===
+// === ALERT BUTTON INTERFACE ===
 interface AlertButton {
   text: string;
   onPress?: () => void;
   style?: 'default' | 'cancel' | 'destructive';
 }
 
-interface AlertState {
-  visible: boolean;
-  title: string;
-  message: string;
-  buttons: AlertButton[];
-}
+// === CUSTOM ALERT SYSTEM ===
+const CustomAlert = ({ visible, title, message, buttons, onClose, isDark }: any) => {
+  if (!visible) return null;
 
-const useAlert = () => {
-  const [alertState, setAlertState] = useState<AlertState>({
-    visible: false,
-    title: '',
-    message: '',
-    buttons: [{ text: 'OK' }],
-  });
+  const backgroundColor = isDark ? DARK_BACKGROUND : LIGHT_BACKGROUND;
+  const textColor = isDark ? DARK_TEXT : LIGHT_TEXT;
+  const borderColor = isDark ? '#333' : '#e0e0e0';
+  const cardBackground = isDark ? '#1e1e1e' : '#ffffff';
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-
-  const showAlert = (title: string, message: string, buttons?: AlertButton[]) => {
-    setAlertState({
-      visible: true,
-      title,
-      message,
-      buttons: buttons || [{ text: 'OK' }],
-    });
-
-    // Reset animations
-    fadeAnim.setValue(0);
-    slideAnim.setValue(50);
-
-    // Start animations
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 100,
-        friction: 10,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const hideAlert = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 50,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setAlertState(prev => ({ ...prev, visible: false }));
-    });
-  };
-
-  const handleButtonPress = (button: AlertButton) => {
-    hideAlert();
-    setTimeout(() => {
-      if (button.onPress) {
-        button.onPress();
-      }
-    }, 200);
-  };
-
-  const AlertComponent = () => {
-    if (!alertState.visible) return null;
-
-    return (
-      <Modal
-        transparent
-        visible={alertState.visible}
-        animationType="none"
-        onRequestClose={hideAlert}
-      >
-        <View style={styles.alertOverlay}>
-          <Animated.View 
-            style={[
-              styles.alertContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              }
-            ]}
-          >
-            <View style={styles.alertHeader}>
-              <Text style={styles.alertTitle}>{alertState.title}</Text>
-            </View>
-            <View style={styles.alertBody}>
-              <Text style={styles.alertMessage}>{alertState.message}</Text>
-            </View>
-            <View style={styles.alertButtons}>
-              {alertState.buttons.map((button, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.alertButton,
-                    button.style === 'destructive' && styles.alertButtonDestructive,
-                    button.style === 'cancel' && styles.alertButtonCancel,
-                  ]}
-                  onPress={() => handleButtonPress(button)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[
-                    styles.alertButtonText,
-                    button.style === 'destructive' && styles.alertButtonTextDestructive,
-                  ]}>
-                    {button.text}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </Animated.View>
+  return (
+    <Modal
+      transparent={true}
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={[styles.alertOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+        <View style={[styles.alertContainer, { backgroundColor: cardBackground, borderColor: borderColor }]}>
+          <Text style={[styles.alertTitle, { color: textColor }]}>{title}</Text>
+          <Text style={[styles.alertMessage, { color: isDark ? '#ccc' : '#666' }]}>{message}</Text>
+          <View style={styles.alertButtons}>
+            {buttons.map((button: any, index: number) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.alertButton,
+                  index === 0 ? styles.alertButtonPrimary : styles.alertButtonSecondary,
+                  index === 0 ? { backgroundColor: PRIMARY_COLOR } : { backgroundColor: cardBackground, borderColor: borderColor }
+                ]}
+                onPress={() => {
+                  button.onPress && button.onPress();
+                  onClose();
+                }}
+              >
+                <Text style={[
+                  styles.alertButtonText,
+                  index === 0 ? { color: '#000' } : { color: textColor }
+                ]}>
+                  {button.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </Modal>
-    );
-  };
-
-  return {
-    showAlert,
-    hideAlert,
-    AlertComponent,
-  };
+      </View>
+    </Modal>
+  );
 };
 
 // === INTERFACES ===
@@ -419,9 +336,9 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
     
     let newCartItems: CartItem[];
 
+    // Prevent duplicate additions - throw error if product already exists
     if (existingItemIndex >= 0) {
-      newCartItems = [...cartItems];
-      newCartItems[existingItemIndex].quantity += quantity;
+      throw new Error('Product is already in cart');
     } else {
       newCartItems = [...cartItems, {
         product,
@@ -434,7 +351,7 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
 
     setCartItems(newCartItems);
     await saveCart(newCartItems);
-    showAlert('✅ Added to Cart', 'Product has been added to your cart successfully!');
+    showAlert('Added to Cart', 'Product has been added to your cart successfully!');
     return newCartItems;
   };
 
@@ -446,7 +363,7 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
     );
     setCartItems(newCartItems);
     await saveCart(newCartItems);
-    showAlert('🗑️ Removed', 'Product has been removed from your cart');
+    showAlert('Removed', 'Product has been removed from your cart');
     return newCartItems;
   };
 
@@ -471,7 +388,7 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
   const clearCart = async () => {
     setCartItems([]);
     await saveCart([]);
-    showAlert('🛒 Cart Cleared', 'All items have been removed from your cart');
+    showAlert('Cart Cleared', 'All items have been removed from your cart');
   };
 
   const getCartCount = () => {
@@ -961,14 +878,26 @@ const ProductDetailsSection: React.FC<{
             {product.sizes_available.map((size) => {
             const getColorStock = (color: string, size: string): number => {
               const colorStockValue = product.color_stock?.[color];
-              if (typeof colorStockValue === 'object' && colorStockValue !== null && selectedColor) {
-                return ((colorStockValue as Record<string, number>) || {})[size] || 0;
+              // Handle nested structure: { Red: { S: 5, M: 10 } }
+              if (typeof colorStockValue === 'object' && colorStockValue !== null) {
+                const sizeStock = (colorStockValue as Record<string, number>)[size];
+                if (sizeStock !== undefined && sizeStock !== null) {
+                  return sizeStock;
+                }
               }
-              return 0;
+              // Handle flat structure: { Red: 5, Blue: 10 } or fallback to overall quantity
+              if (typeof colorStockValue === 'number') {
+                return colorStockValue;
+              }
+              // Fallback to overall product quantity
+              return product.quantity || 0;
             };
+            // Check if size has specific stock data
+            const hasSizeStockData = product.size_stock && typeof product.size_stock === 'object' && size in product.size_stock;
+            const sizeStockValue = hasSizeStockData ? product.size_stock[size as keyof typeof product.size_stock] : null;
             const isOutOfStock = selectedColor 
               ? getColorStock(selectedColor, size) <= 0
-              : (product.size_stock?.[size] || 0) <= 0;
+              : (hasSizeStockData ? (sizeStockValue as number) <= 0 : (product.quantity ?? 0) <= 0);
             const isSelected = selectedSize === size;
               
               return (
@@ -2589,23 +2518,16 @@ const ProductDetailModal: React.FC<{
 
   const handleAddToCart = async () => {
     if (!product) return;
-    
-    // Validate selections
-    if (product.colors_available && product.colors_available.length > 0 && !selectedColor) {
-      showAlert('Selection Required', 'Please select a color for this product');
-      return;
-    }
-    
-    if (product.sizes_available && product.sizes_available.length > 0 && !selectedSize) {
-      showAlert('Selection Required', 'Please select a size for this product');
-      return;
-    }
 
     setAddingToCart(true);
     try {
       await onAddToCart(product, selectedColor, selectedSize, quantity);
-    } catch (error) {
-      showAlert('Error', 'Failed to add product to cart');
+    } catch (error: any) {
+      if (error.message === 'Product is already in cart') {
+        showAlert('Already in Cart', 'This product is already in your cart. You can update the quantity from the cart.');
+      } else {
+        showAlert('Error', 'Failed to add product to cart');
+      }
     } finally {
       setAddingToCart(false);
     }
@@ -2787,14 +2709,27 @@ const getAvailableStock = () => {
                     {product.sizes_available.map((size) => {
                       const getColorStockForSize = (color: string, size: string): number => {
                         const colorStockValue = product.color_stock?.[color];
+                        // Handle nested structure: { Red: { S: 5, M: 10 } }
                         if (typeof colorStockValue === 'object' && colorStockValue !== null) {
-                          return ((colorStockValue as Record<string, number>)[size] || 0);
+                          const sizeStock = (colorStockValue as Record<string, number>)[size];
+                          if (sizeStock !== undefined && sizeStock !== null) {
+                            return sizeStock;
+                          }
                         }
-                        return 0;
+                        // Handle flat structure: { Red: 5, Blue: 10 } or fallback to overall quantity
+                        if (typeof colorStockValue === 'number') {
+                          return colorStockValue;
+                        }
+                        // Fallback to overall product quantity
+                        return product.quantity || 0;
                       };
+                      
+                      // Check if size has specific stock data
+                      const hasSizeStockData = product.size_stock && typeof product.size_stock === 'object' && size in product.size_stock;
+                      const sizeStockValue = hasSizeStockData ? product.size_stock[size as keyof typeof product.size_stock] : null;
                       const isOutOfStock = selectedColor 
                         ? getColorStockForSize(selectedColor, size) <= 0
-                        : (product.size_stock?.[size] || 0) <= 0;
+                        : (hasSizeStockData ? (sizeStockValue as number) <= 0 : (product.quantity ?? 0) <= 0);
                       const isSelected = selectedSize === size;
                       
                       return (
@@ -3645,7 +3580,21 @@ export default function SearchScreen() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
 
   // Custom Alert system
-  const { showAlert, AlertComponent } = useAlert();
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertButtons, setAlertButtons] = useState<any[]>([{ text: 'OK' }]);
+
+  const showAlert = (title: string, message: string, buttons?: any[]) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertButtons(buttons || [{ text: 'OK' }]);
+    setAlertVisible(true);
+  };
+
+  const hideAlert = () => {
+    setAlertVisible(false);
+  };
 
   // Cart hook - pass showAlert to it
   const {
@@ -4250,31 +4199,39 @@ export default function SearchScreen() {
   };
 
   const handleAddToCart = async (product: Product, selectedColor?: string, selectedSize?: string, quantity: number = 1) => {
-    const newCartItems = await addToCart(product, selectedColor, selectedSize, quantity);
-    
-    // Update sections to reflect in-cart status (basic check, not color/size specific)
-    setSections(prev => prev.map(section => ({
-      ...section,
-      data: section.data.map(p => 
+    try {
+      const newCartItems = await addToCart(product, selectedColor, selectedSize, quantity);
+      
+      // Update sections to reflect in-cart status (basic check, not color/size specific)
+      setSections(prev => prev.map(section => ({
+        ...section,
+        data: section.data.map(p => 
+          p.id === product.id ? { ...p, inCart: true } : p
+        )
+      })));
+      
+      // Update featured products
+      setFeaturedProducts(prev => prev.map(p => 
         p.id === product.id ? { ...p, inCart: true } : p
-      )
-    })));
-    
-    // Update featured products
-    setFeaturedProducts(prev => prev.map(p => 
-      p.id === product.id ? { ...p, inCart: true } : p
-    ));
-    
-    // Update trending products
-    setTrendingProducts(prev => prev.map(p => 
-      p.id === product.id ? { ...p, inCart: true } : p
-    ));
-    
-    if (selectedProduct && selectedProduct.id === product.id) {
-      setSelectedProduct(prev => prev ? { ...prev, inCart: true } : null);
+      ));
+      
+      // Update trending products
+      setTrendingProducts(prev => prev.map(p => 
+        p.id === product.id ? { ...p, inCart: true } : p
+      ));
+      
+      if (selectedProduct && selectedProduct.id === product.id) {
+        setSelectedProduct(prev => prev ? { ...prev, inCart: true } : null);
+      }
+      
+      return newCartItems;
+    } catch (error: any) {
+      if (error.message === 'Product is already in cart') {
+        showAlert('Already in Cart', 'This product is already in your cart. You can update the quantity from the cart.');
+      } else {
+        throw error;
+      }
     }
-    
-    return newCartItems;
   };
 
   const handleRemoveFromCart = async (productId: string, selectedColor?: string, selectedSize?: string) => {
@@ -4428,8 +4385,8 @@ export default function SearchScreen() {
         
         // Show success alert
         showAlert(
-          '🎉 Order Placed Successfully!',
-          'Your order has been placed successfully. The seller will contact you shortly.',
+          'Order Successful!',
+          `Your order #${order.id.slice(-8)} has been placed successfully. The seller will contact you shortly.`,
           [
             { 
               text: 'OK', 
@@ -4530,7 +4487,7 @@ export default function SearchScreen() {
         
         // Show success alert
         showAlert(
-          '🎉 Order Placed Successfully!',
+          'Order Successful!',
           'Your cart order has been placed successfully. The sellers will contact you shortly.',
           [
             { 
@@ -4598,11 +4555,7 @@ export default function SearchScreen() {
 
   // Check if product is in cart (with specific color/size)
   const isProductInCart = (productId: string, selectedColor?: string, selectedSize?: string) => {
-    return cartItems.some(item => 
-      item.product.id === productId && 
-      item.selectedColor === selectedColor && 
-      item.selectedSize === selectedSize
-    );
+    return cartItems.some(item => item.product.id === productId);
   };
 
   const ITEM_WIDTH = (width - HORIZONTAL_PADDING * 2 - GAP * (numColumns - 1)) / numColumns;
@@ -4735,7 +4688,14 @@ export default function SearchScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={backgroundColor} />
       
       {/* Custom Alert Component */}
-      <AlertComponent />
+      <CustomAlert 
+        visible={alertVisible} 
+        title={alertTitle} 
+        message={alertMessage} 
+        buttons={alertButtons}
+        onClose={hideAlert}
+        isDark={isDark}
+      />
       
       {/* Professional Header */}
       <SafeAreaView style={[styles.safeArea, { backgroundColor }]}>
@@ -5051,69 +5011,50 @@ const styles = StyleSheet.create({
   // Custom Alert Styles
   alertOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    zIndex: 9999,
   },
   alertContainer: {
-    width: '90%',
-    backgroundColor: '#fff',
     borderRadius: 15,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  alertHeader: {
-    backgroundColor: PRIMARY_COLOR,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    padding: 20,
+    width: '85%',
+    maxWidth: 400,
+    borderWidth: 1,
   },
   alertTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    marginBottom: 10,
     textAlign: 'center',
-  },
-  alertBody: {
-    padding: 25,
   },
   alertMessage: {
     fontSize: 16,
-    color: '#333',
+    marginBottom: 20,
     textAlign: 'center',
     lineHeight: 22,
   },
   alertButtons: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   alertButton: {
     flex: 1,
-    paddingVertical: 16,
+    padding: 14,
+    borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#eee',
   },
-  alertButtonDestructive: {
-    backgroundColor: '#fff',
-  },
-  alertButtonCancel: {
-    backgroundColor: '#f9f9f9',
+  alertButtonPrimary: {},
+  alertButtonSecondary: {
+    borderWidth: 1,
   },
   alertButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: PRIMARY_COLOR,
   },
-  alertButtonTextDestructive: {
-    color: '#FF3B30',
-  },
+  alertButtonPrimaryText: {},
+  alertButtonSecondaryText: {},
 
   container: {
     flex: 1,

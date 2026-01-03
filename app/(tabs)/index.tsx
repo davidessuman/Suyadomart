@@ -850,6 +850,7 @@ const ContactSellerModal: React.FC<{
   const [sellerAvatar, setSellerAvatar] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [shopData, setShopData] = useState<any>(null);
+  const sellerCacheRef = useRef<Map<string, any>>(new Map()); // Cache seller data by seller_id
 
   useEffect(() => {
     const fetchSellerInfo = async () => {
@@ -861,82 +862,109 @@ const ContactSellerModal: React.FC<{
      
       setLoading(true);
       setError('');
-      setShopData(null);
-      setSellerPhone('');
-      setSellerName('');
-      setSellerAvatar('');
+      
+      // Use immediate product data while fetching detailed shop info
+      setSellerName(product.display_name || 'Seller');
+      if (product.avatar_url) {
+        setSellerAvatar(product.avatar_url);
+      }
+      
+      // Check cache first
+      const cached = sellerCacheRef.current.get(product.seller_id);
+      if (cached) {
+        setSellerPhone(cached.phone || '');
+        setSellerName(cached.name || product.display_name || 'Seller');
+        if (cached.avatar_url) {
+          const url = cached.avatar_url.startsWith('http')
+            ? cached.avatar_url
+            : `${SUPABASE_URL}/storage/v1/object/public/avatars/${cached.avatar_url}`;
+          setSellerAvatar(url);
+        }
+        setShopData(cached.shopData);
+        setLoading(false);
+        return;
+      }
       
       try {
-        console.log('🔍 Fetching seller contact from shops table for seller_id:', product.seller_id);
+        // Fetch shop and user profile in parallel with 3 second timeout
+        let shopData = null;
+        let userData = null;
+        let timedOut = false;
         
-        const { data: shopData, error: shopError } = await supabase
-          .from('shops')
-          .select('phone, name, avatar_url, location, description')
-          .eq('owner_id', product.seller_id)
-          .single();
+        const timeoutPromise = new Promise<null>(resolve => {
+          setTimeout(() => {
+            timedOut = true;
+            resolve(null);
+          }, 3000); // 3 second timeout
+        });
 
-        console.log('✅ Shop data response:', shopData);
-
-        if (shopError) {
-          console.log('❌ Shop not found in shops table for seller_id:', product.seller_id);
-          
-          const { data: userData, error: userError } = await supabase
+        // Create race between queries and timeout
+        const queryPromise = Promise.all([
+          supabase
+            .from('shops')
+            .select('phone, name, avatar_url, location, description')
+            .eq('owner_id', product.seller_id)
+            .maybeSingle(),
+          supabase
             .from('user_profiles')
             .select('full_name, avatar_url')
             .eq('id', product.seller_id)
-            .single();
-            
-          if (userError) {
-            console.log('⚠️ User profile also not found');
-            setSellerName(product.display_name || 'Seller');
-            setSellerAvatar('');
-          } else {
-            console.log('✅ Found user profile:', userData);
-            setSellerName(userData?.full_name || product.display_name || 'Seller');
-            setSellerAvatar(userData?.avatar_url || '');
-          }
+            .maybeSingle()
+        ]);
+
+        const result = await Promise.race<any>([queryPromise, timeoutPromise]);
+        
+        if (result && !timedOut) {
+          const [{ data: sd }, { data: ud }] = result;
+          shopData = sd;
+          userData = ud;
+        }
+
+        // Use shop data if available, otherwise use user profile
+        if (shopData) {
+          // Cache the data
+          sellerCacheRef.current.set(product.seller_id, {
+            ...shopData,
+            shopData: shopData
+          });
           
+          setShopData(shopData);
+          setSellerPhone(shopData.phone || '');
+          setSellerName(shopData.name || product.display_name || 'Seller');
+          
+          if (shopData.avatar_url) {
+            const url = shopData.avatar_url.startsWith('http')
+              ? shopData.avatar_url
+              : `${SUPABASE_URL}/storage/v1/object/public/avatars/${shopData.avatar_url}`;
+            setSellerAvatar(url);
+          } else if (userData?.avatar_url) {
+            const url = userData.avatar_url.startsWith('http')
+              ? userData.avatar_url
+              : `${SUPABASE_URL}/storage/v1/object/public/avatars/${userData.avatar_url}`;
+            setSellerAvatar(url);
+          }
+        } else if (userData) {
+          // Cache user profile
+          sellerCacheRef.current.set(product.seller_id, {
+            ...userData,
+            shopData: null
+          });
+          
+          setSellerName(userData.full_name || product.display_name || 'Seller');
           setSellerPhone('');
           setShopData(null);
-        } else {
-          console.log('✅ Shop found with data:', shopData);
-          setShopData(shopData);
           
-          const phone = shopData?.phone || '';
-          setSellerPhone(phone);
-          
-          const name = shopData?.name || product.display_name || 'Seller';
-          setSellerName(name);
-          
-          let avatarUrl = '';
-          if (shopData?.avatar_url) {
-            if (shopData.avatar_url.startsWith('http')) {
-              avatarUrl = shopData.avatar_url;
-            } else {
-              avatarUrl = `${SUPABASE_URL}/storage/v1/object/public/avatars/${shopData.avatar_url}`;
-            }
-          } else {
-            const { data: userData } = await supabase
-              .from('user_profiles')
-              .select('avatar_url')
-              .eq('id', product.seller_id)
-              .single();
-              
-            if (userData?.avatar_url) {
-              if (userData.avatar_url.startsWith('http')) {
-                avatarUrl = userData.avatar_url;
-              } else {
-                avatarUrl = `${SUPABASE_URL}/storage/v1/object/public/avatars/${userData.avatar_url}`;
-              }
-            }
+          if (userData.avatar_url) {
+            const url = userData.avatar_url.startsWith('http')
+              ? userData.avatar_url
+              : `${SUPABASE_URL}/storage/v1/object/public/avatars/${userData.avatar_url}`;
+            setSellerAvatar(url);
           }
-          setSellerAvatar(avatarUrl);
         }
        
       } catch (error: any) {
-        console.error('❌ Error fetching seller info:', error);
-        setError('Could not fetch seller contact information');
-        showAlert('Error', 'Could not fetch seller contact information');
+        console.error('Error fetching seller info:', error);
+        // Keep using the immediate data even if detailed fetch fails
       } finally {
         setLoading(false);
       }
@@ -1074,12 +1102,14 @@ const ContactSellerModal: React.FC<{
           </View>
           
           <ScrollView style={styles.contactContent} showsVerticalScrollIndicator={false}>
-            {loading ? (
+            {!sellerPhone && !sellerName ? (
+              // Show skeleton loader while initial data is loading
               <View style={styles.contactLoading}>
                 <ActivityIndicator size="large" color={theme.primary} />
                 <Text style={[styles.contactLoadingText, { color: theme.text }]}>Loading seller information...</Text>
               </View>
             ) : !sellerPhone ? (
+              // Seller data loaded but no phone (shop not set up)
               <View style={styles.contactUnavailable}>
                 <Ionicons name="call-outline" size={80} color={theme.textTertiary} />
                 <Text style={[styles.contactUnavailableTitle, { color: theme.text }]}>Contact Unavailable</Text>
@@ -1268,7 +1298,7 @@ const ShareModal: React.FC<{
   const shareOptions = [
     { id: 'whatsapp', name: 'WhatsApp', icon: 'logo-whatsapp', iconType: 'ionicons', color: '#25D366', scheme: 'whatsapp://send?text=' },
     { id: 'facebook', name: 'Facebook', icon: 'logo-facebook', iconType: 'ionicons', color: '#1877F2', scheme: 'fb://share?text=' },
-    { id: 'x', name: 'X', icon: 'x-twitter', iconType: 'fontawesome', color: '#000000', scheme: 'twitter://post?message=' },
+    { id: 'x', name: 'X', icon: 'twitter', iconType: 'fontawesome', color: '#000000', scheme: 'twitter://post?message=' },
     { id: 'instagram', name: 'Instagram', icon: 'logo-instagram', iconType: 'ionicons', color: '#E4405F', scheme: 'instagram://share?text=' },
     { id: 'telegram', name: 'Telegram', icon: 'paper-plane', iconType: 'ionicons', color: '#0088cc', scheme: 'tg://msg?text=' },
     { id: 'copy', name: 'Copy Link', icon: 'copy', iconType: 'ionicons', color: theme.textSecondary },
@@ -1455,7 +1485,9 @@ const ShareModal: React.FC<{
                 onPress={() => handleShare(option.id)}
               >
                 <View style={[styles.shareIconContainer, { backgroundColor: option.color }]}>
-                  {option.iconType === 'fontawesome' ? (
+                  {option.id === 'x' ? (
+                    <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#fff' }}>X</Text>
+                  ) : option.iconType === 'fontawesome' ? (
                     <FontAwesome name={option.icon as any} size={30} color="#fff" />
                   ) : (
                     <Ionicons name={option.icon as any} size={30} color="#fff" />
@@ -2952,9 +2984,10 @@ const useCart = () => {
   const addToCart = async (product: Product) => {
     const existingItemIndex = cartItems.findIndex(item => item.product.id === product.id);
     let newCartItems: CartItem[];
+    
+    // Prevent duplicate additions - throw error if product already exists
     if (existingItemIndex >= 0) {
-      newCartItems = [...cartItems];
-      newCartItems[existingItemIndex].quantity += 1;
+      throw new Error('Product is already in cart');
     } else {
       newCartItems = [...cartItems, {
         product,
@@ -2962,6 +2995,7 @@ const useCart = () => {
         added_at: new Date().toISOString(),
       }];
     }
+    
     setCartItems(newCartItems);
     await saveCart(newCartItems);
     return newCartItems;
@@ -3213,19 +3247,27 @@ const CommentsModal: React.FC<{
     fetchComments();
     const channel = supabase
       .channel(`product-comments:${productId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'product_comments', filter: `product_id=eq.${productId}` }, (payload: any) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'product_comments', filter: `product_id=eq.${productId}` }, async (payload: any) => {
         const newComment = payload.new;
-        const profile = newComment.user_profiles || {};
+        
+        // Fetch user profile for the new comment
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('username, avatar_url')
+          .eq('id', newComment.user_id)
+          .maybeSingle();
+        
+        const profile = profileData || {};
         const formatted: Comment = {
           id: newComment.id,
           text: newComment.comment_text,
           time: 'just now',
-          user: profile.username || 'Someone',
+          user: profile.username || 'Anonymous',
           avatarUrl: profile.avatar_url
             ? profile.avatar_url.startsWith('http')
               ? profile.avatar_url
               : `${SUPABASE_URL}/storage/v1/object/public/avatars/${profile.avatar_url}`
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.username|| 'U')}&background=FF9900&color=fff`,
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.username || 'User')}&background=FF9900&color=fff`,
         };
         setComments(prev => [formatted, ...prev]);
       })
@@ -3325,9 +3367,10 @@ const SimilarProductsSection: React.FC<{
   product: Product;
   onProductSelect: (product: Product) => void;
   onAddToCart: (product: Product) => Promise<void>;
+  cartItems?: CartItem[];
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
-}> = ({ product, onProductSelect, onAddToCart, showAlert, theme }) => {
+}> = ({ product, onProductSelect, onAddToCart, cartItems = [], showAlert, theme }) => {
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -3585,8 +3628,12 @@ const SimilarProductsSection: React.FC<{
     try {
       await onAddToCart(productItem);
       showAlert('Success', 'Product added to cart!');
-    } catch (error) {
-      showAlert('Error', 'Failed to add product to cart');
+    } catch (error: any) {
+      if (error.message === 'Product is already in cart') {
+        showAlert('Already in Cart', 'This product is already in your cart. You can update the quantity from the cart.');
+      } else {
+        showAlert('Sorry', 'Product is already in cart');
+      }
     }
   };
 
@@ -3687,13 +3734,28 @@ const SimilarProductsSection: React.FC<{
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.similarAddToCartButton, { backgroundColor: theme.primary }]}
+                style={[styles.similarAddToCartButton, { 
+                  backgroundColor: (() => {
+                    const isInCart = cartItems.some(cartItem => cartItem.product.id === item.id);
+                    return isInCart ? theme.textTertiary : theme.primary;
+                  })()
+                }]}
                 onPress={(e) => {
                   e.stopPropagation();
-                  handleAddToCart(item);
+                  const isInCart = cartItems.some(cartItem => cartItem.product.id === item.id);
+                  if (!isInCart) {
+                    handleAddToCart(item);
+                  } else {
+                    showAlert('Already in Cart', 'This product is already in your cart.');
+                  }
                 }}
+                disabled={cartItems.some(cartItem => cartItem.product.id === item.id)}
               >
-                <Ionicons name="cart-outline" size={16} color="#fff" />
+                <Ionicons 
+                  name={cartItems.some(cartItem => cartItem.product.id === item.id) ? "checkmark-circle" : "cart-outline"} 
+                  size={16} 
+                  color="#fff" 
+                />
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -4185,8 +4247,9 @@ const OrderFormModal: React.FC<{
                     <Text style={[styles.selectionLabel, { color: theme.text }]}>Select Size</Text>
                     <View style={styles.selectionOptions}>
                       {fullProductData.sizes_available.map((size: string) => {
-                        const sizeQty = fullProductData.size_stock?.[size] || 0;
-                        const isOutOfStock = parseInt(sizeQty) === 0;
+                        const hasSizeStockData = fullProductData.size_stock && typeof fullProductData.size_stock === 'object' && size in fullProductData.size_stock;
+                        const sizeQty = hasSizeStockData ? fullProductData.size_stock[size as keyof typeof fullProductData.size_stock] : fullProductData.quantity || 0;
+                        const isOutOfStock = parseInt(sizeQty as string | number) === 0;
                         const isSelected = selectedSize === size;
                         
                         return (
@@ -4799,13 +4862,14 @@ const ProductDetailModal: React.FC<{
   onOpenFullViewer: (index: number) => void;
   onSelectSimilarProduct: (product: Product) => void;
   onAddToCart: (product: Product) => Promise<void>;
-  isInCart: boolean;
+  isInCart: () => boolean;
+  cartItems?: CartItem[];
   onPlaceOrder: (product: Product, options?: { selectedColor?: string | null; selectedSize?: string | null; quantity?: number | null }) => void;
   fromCart?: boolean;
   fromSellerProfile?: boolean;
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
-}> = ({ isVisible, onClose, product, onOpenFullViewer, onSelectSimilarProduct, onAddToCart, isInCart, onPlaceOrder, fromCart = false, fromSellerProfile = false, showAlert, theme }) => {
+}> = ({ isVisible, onClose, product, onOpenFullViewer, onSelectSimilarProduct, onAddToCart, isInCart, cartItems = [], onPlaceOrder, fromCart = false, fromSellerProfile = false, showAlert, theme }) => {
   const [addingToCart, setAddingToCart] = useState(false);
   const [productWithSeller, setProductWithSeller] = useState<Product | null>(null);
   const [loadingSeller, setLoadingSeller] = useState(false);
@@ -4815,7 +4879,28 @@ const ProductDetailModal: React.FC<{
   const [quantity, setQuantity] = useState<number>(1);
   const [fullProductData, setFullProductData] = useState<any>(null);
   const [loadingProductDetails, setLoadingProductDetails] = useState(false);
+  const [colorSpecificMedia, setColorSpecificMedia] = useState<string[]>([]);
   const { width } = useWindowDimensions();
+    // Update colorSpecificMedia when selectedColor or fullProductData changes
+    useEffect(() => {
+      if (!fullProductData) {
+        setColorSpecificMedia([]);
+        return;
+      }
+      if (selectedColor && fullProductData.color_media && fullProductData.color_media[selectedColor]?.length > 0) {
+        const formatted = fullProductData.color_media[selectedColor].map((url: string) =>
+          url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`
+        );
+        setColorSpecificMedia(formatted);
+      } else if (fullProductData.media_urls) {
+        const formatted = fullProductData.media_urls.map((url: string) =>
+          url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`
+        );
+        setColorSpecificMedia(formatted);
+      } else {
+        setColorSpecificMedia([]);
+      }
+    }, [selectedColor, fullProductData]);
   
   // Calculate media dimensions based on screen size
   const isLargeScreen = width >= 768;
@@ -4944,8 +5029,12 @@ const ProductDetailModal: React.FC<{
     try {
       await onAddToCart(product);
       showAlert('Success', 'Product added to cart!');
-    } catch (error) {
-      showAlert('Error', 'Failed to add product to cart');
+    } catch (error: any) {
+      if (error.message === 'Product is already in cart') {
+        showAlert('Already in Cart', 'This product is already in your cart. You can update the quantity from the cart.');
+      } else {
+        showAlert('Sorry', 'Product is already in cart');
+      }
     } finally {
       setAddingToCart(false);
     }
@@ -5091,10 +5180,10 @@ const ProductDetailModal: React.FC<{
             <ScrollView contentContainerStyle={styles.modalScrollContent}>
               {/* Media Gallery with Color Navigation */}
               <View style={[styles.mediaGalleryContainer, { alignItems: 'center' }]}>
-                {displayProduct.media_urls?.length > 0 && (
+                {(colorSpecificMedia.length > 0 || displayProduct.media_urls?.length > 0) && (
                   <View style={{ width: mediaWidth, height: mediaHeight }}>
                     <FlatList
-                      data={displayProduct.media_urls.map((u: string) => u.startsWith('http') ? u : `${SUPABASE_URL}/storage/v1/object/public/products/${u}`)}
+                      data={(colorSpecificMedia.length > 0 ? colorSpecificMedia : displayProduct.media_urls.map((u: string) => u.startsWith('http') ? u : `${SUPABASE_URL}/storage/v1/object/public/products/${u}`))}
                       horizontal
                       pagingEnabled
                       showsHorizontalScrollIndicator={false}
@@ -5108,7 +5197,7 @@ const ProductDetailModal: React.FC<{
                           <TouchableOpacity activeOpacity={0.95} style={{ width: mediaWidth, height: mediaHeight }} onPress={() => onOpenFullViewer(index)}>
                             {isVideo ? (
                               <View style={{ width: '100%', height: '100%' }}>
-                                <Image source={{ uri: getCardDisplayUrl(displayProduct.media_urls) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                <Image source={{ uri: getCardDisplayUrl(colorSpecificMedia.length > 0 ? colorSpecificMedia : displayProduct.media_urls) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                                 <View style={styles.tiktokPlayThumbnailOverlay} pointerEvents="none">
                                   <View style={styles.tiktokPlayButtonSmall}>
                                     <Ionicons name="play" size={28} color="#fff" />
@@ -5240,8 +5329,9 @@ const ProductDetailModal: React.FC<{
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sizeChips}>
                       {fullProductData.sizes_available.map((size: string) => {
-                        const sizeQty = fullProductData.size_stock?.[size] || 0;
-                        const isSizeOutOfStock = parseInt(sizeQty) === 0;
+                        const hasSizeStockData = fullProductData.size_stock && typeof fullProductData.size_stock === 'object' && size in fullProductData.size_stock;
+                        const sizeQty = hasSizeStockData ? fullProductData.size_stock[size as keyof typeof fullProductData.size_stock] : fullProductData.quantity || 0;
+                        const isSizeOutOfStock = parseInt(sizeQty as string | number) === 0;
                         const isSelected = selectedSize === size;
                         
                         return (
@@ -5381,6 +5471,7 @@ const ProductDetailModal: React.FC<{
                   product={displayProduct}
                   onProductSelect={onSelectSimilarProduct}
                   onAddToCart={onAddToCart}
+                  cartItems={cartItems}
                   showAlert={showAlert}
                   theme={theme}
                 />
@@ -5406,22 +5497,22 @@ const ProductDetailModal: React.FC<{
             <View style={[styles.modalActionBar, { borderTopColor: theme.border, backgroundColor: theme.modalBackground }]}>
               <TouchableOpacity
                 style={[styles.modalAddToCartButton, { 
-                  backgroundColor: isOutOfStock ? theme.error : theme.primary 
-                }, isInCart && styles.modalInCartButton]}
+                  backgroundColor: isOutOfStock ? theme.error : isInCart() ? theme.textTertiary : theme.primary 
+                }, isInCart() && styles.modalInCartButton]}
                 onPress={handleAddToCart}
-                disabled={addingToCart || isOutOfStock}
+                disabled={addingToCart || isOutOfStock || isInCart()}
               >
                 {addingToCart ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Ionicons
-                    name={isInCart ? "checkmark-circle" : isOutOfStock ? "close-circle" : "cart-outline"}
+                    name={isInCart() ? "checkmark-circle" : isOutOfStock ? "close-circle" : "cart-outline"}
                     size={20}
                     color="#fff"
                   />
                 )}
                 <Text style={styles.modalAddToCartButtonText}>
-                  {isOutOfStock ? 'Out of Stock' : isInCart ? 'In Cart' : 'Add to Cart'}
+                  {isOutOfStock ? 'Out of Stock' : isInCart() ? 'Already in Cart' : 'Add to Cart'}
                 </Text>
               </TouchableOpacity>
               
@@ -5559,7 +5650,7 @@ const SellerProfileModal: React.FC<{
       await onAddToCart(product);
       showAlert('Success', 'Product added to cart!');
     } catch (error) {
-      showAlert('Error', 'Failed to add product to cart');
+      showAlert('Sorry', 'Product is already in cart');
     }
   };
 
@@ -5706,26 +5797,56 @@ const ProductFeedCard: React.FC<{
     if (doubleTapRef.current && now - doubleTapRef.current < 300) {
       // double tap -> like
       doubleTapRef.current = null;
-      if (!item.isLiked) {
-        setShowHeart(true);
-        setTimeout(() => setShowHeart(false), 800);
-        const userId = await getCurrentUserId();
-        if (!userId) {
-          showAlert('Login Required', 'Please log in to like');
-          return;
-        }
+      // Prevent concurrent operations and prevent multiple rapid taps
+      if (likeLoading) return;
+      
+      // Only allow liking if not already liked
+      if (item.isLiked) return;
+      
+      setShowHeart(true);
+      setTimeout(() => setShowHeart(false), 800);
+      setLikeLoading(true);
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        showAlert('Login Required', 'Please log in to like');
+        setLikeLoading(false);
+        return;
+      }
+      // Check if user already liked this product
+      const { data: existingLike, error: checkError } = await supabase
+        .from('product_likes')
+        .select('id')
+        .eq('product_id', item.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (checkError) {
+        showAlert('Error', 'Failed to check like status');
+        setLikeLoading(false);
+        return;
+      }
+      if (existingLike) {
+        // Already liked, do not increment
         setProducts(prev => prev.map(p =>
-          p.id === item.id ? { ...p, isLiked: true, likeCount: (p.likeCount || 0) + 1 } : p
+          p.id === item.id ? { ...p, isLiked: true, likeCount: p.likeCount || 1 } : p
         ));
-        try {
-          const { error } = await supabase.from('product_likes').insert({ product_id: item.id, user_id: userId });
-          if (error) throw error;
-        } catch (error) {
-          showAlert('Error', 'Failed to like');
-          setProducts(prev => prev.map(p =>
-            p.id === item.id ? { ...p, isLiked: false, likeCount: Math.max((p.likeCount || 1) - 1, 0) } : p
-          ));
-        }
+        setLikeLoading(false);
+        return;
+      }
+      // Update UI to show liked state immediately
+      const previousLikeCount = item.likeCount || 0;
+      setProducts(prev => prev.map(p =>
+        p.id === item.id ? { ...p, isLiked: true, likeCount: previousLikeCount + 1 } : p
+      ));
+      try {
+        const { error } = await supabase.from('product_likes').insert({ product_id: item.id, user_id: userId });
+        if (error) throw error;
+      } catch (error) {
+        showAlert('Error', 'Failed to like');
+        setProducts(prev => prev.map(p =>
+          p.id === item.id ? { ...p, isLiked: false, likeCount: Math.max((p.likeCount || 1) - 1, 0) } : p
+        ));
+      } finally {
+        setLikeLoading(false);
       }
       // cancel any pending single-tap action
       if (tapTimeoutRef.current) {
@@ -5866,27 +5987,48 @@ const ProductFeedCard: React.FC<{
     }
     
     setLikeLoading(true);
-    const newLiked = !item.isLiked;
     const previousLikeCount = item.likeCount || 0;
-    
-    // Optimistic update
-    setProducts(prev => prev.map(p =>
-      p.id === item.id ? { ...p, isLiked: newLiked, likeCount: previousLikeCount + (newLiked ? 1 : -1) } : p
-    ));
-    
+
     try {
-      if (newLiked) {
-        const { error } = await supabase.from('product_likes').insert({ product_id: item.id, user_id: userId });
+      if (item.isLiked) {
+        // Unlike
+        setProducts(prev => prev.map(p =>
+          p.id === item.id ? { ...p, isLiked: false, likeCount: Math.max(previousLikeCount - 1, 0) } : p
+        ));
+        const { error } = await supabase.from('product_likes').delete().eq('product_id', item.id).eq('user_id', userId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('product_likes').delete().eq('product_id', item.id).eq('user_id', userId);
+        // Like - check if user already liked this product
+        const { data: existingLike, error: checkError } = await supabase
+          .from('product_likes')
+          .select('id')
+          .eq('product_id', item.id)
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (checkError) throw checkError;
+        
+        if (existingLike) {
+          // Already liked, do not increment
+          setProducts(prev => prev.map(p =>
+            p.id === item.id ? { ...p, isLiked: true, likeCount: previousLikeCount } : p
+          ));
+          return;
+        }
+        
+        // Update UI to show liked state immediately
+        setProducts(prev => prev.map(p =>
+          p.id === item.id ? { ...p, isLiked: true, likeCount: previousLikeCount + 1 } : p
+        ));
+        
+        // Insert into database
+        const { error } = await supabase.from('product_likes').insert({ product_id: item.id, user_id: userId });
         if (error) throw error;
       }
     } catch (error) {
       showAlert('Error', 'Failed to update like');
       // Revert optimistic update on error
       setProducts(prev => prev.map(p =>
-        p.id === item.id ? { ...p, isLiked: !newLiked, likeCount: previousLikeCount } : p
+        p.id === item.id ? { ...p, isLiked: !item.isLiked, likeCount: previousLikeCount } : p
       ));
     } finally {
       setLikeLoading(false);
@@ -5899,7 +6041,7 @@ const ProductFeedCard: React.FC<{
       await onAddToCart(item);
       showAlert('Success', 'Product added to cart!');
     } catch (error) {
-      showAlert('Error', 'Failed to add product to cart');
+      showAlert('Sorry', 'Product is already in cart');
     } finally {
       setAddingToCart(false);
     }
@@ -7529,12 +7671,17 @@ export default function BuyerScreen() {
       table: 'product_shares' 
     }, (payload: any) => {
       const productId = payload.new?.product_id;
+      const userId = payload.new?.user_id;
       if (!productId) return;
       
-      // Increment share count for this product
-      setProducts(prev => prev.map(p => 
-        p.id === productId ? { ...p, shareCount: (p.shareCount || 0) + 1 } : p
-      ));
+      // Only update real-time if it's not from the current user (to avoid double increment from optimistic update)
+      getCurrentUserId().then(currentUserId => {
+        if (userId !== currentUserId) {
+          setProducts(prev => prev.map(p => 
+            p.id === productId ? { ...p, shareCount: (p.shareCount || 0) + 1 } : p
+          ));
+        }
+      });
     });
     
     channel.on('postgres_changes', { 
@@ -7543,12 +7690,17 @@ export default function BuyerScreen() {
       table: 'product_shares' 
     }, (payload: any) => {
       const productId = payload.old?.product_id;
+      const userId = payload.old?.user_id;
       if (!productId) return;
       
-      // Decrement share count for this product
-      setProducts(prev => prev.map(p => 
-        p.id === productId ? { ...p, shareCount: Math.max((p.shareCount || 1) - 1, 0) } : p
-      ));
+      // Only update real-time if it's not from the current user (to avoid double decrement from optimistic update)
+      getCurrentUserId().then(currentUserId => {
+        if (userId !== currentUserId) {
+          setProducts(prev => prev.map(p => 
+            p.id === productId ? { ...p, shareCount: Math.max((p.shareCount || 1) - 1, 0) } : p
+          ));
+        }
+      });
     });
     
     // Keep existing listeners
@@ -7556,10 +7708,16 @@ export default function BuyerScreen() {
       const newRow = payload.new;
       const oldRow = payload.old;
       const productId = newRow?.product_id ?? oldRow?.product_id;
+      const userId = newRow?.user_id ?? oldRow?.user_id;
       if (!productId) return;
       const delta = payload.eventType === 'INSERT' || payload.event === 'INSERT' ? 1 : (payload.eventType === 'DELETE' || payload.event === 'DELETE' ? -1 : 0);
       if (delta === 0) return;
-      setProducts(prev => prev.map(p => p.id === productId ? { ...p, likeCount: Math.max((p.likeCount || 0) + delta, 0) } : p));
+      // Only update real-time if it's not from the current user (to avoid double increment from optimistic update)
+      getCurrentUserId().then(currentUserId => {
+        if (userId !== currentUserId) {
+          setProducts(prev => prev.map(p => p.id === productId ? { ...p, likeCount: Math.max((p.likeCount || 0) + delta, 0) } : p));
+        }
+      });
     });
     
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'product_comments' }, (payload: any) => {
@@ -7741,7 +7899,8 @@ export default function BuyerScreen() {
         onOpenFullViewer={setFullViewerIndex}
         onSelectSimilarProduct={handleSelectSimilarProduct as any}
         onAddToCart={handleAddToCart as any}
-        isInCart={(selectedProduct?.inCart || productFromQuery?.inCart) || false}
+        isInCart={() => cartItems.some(item => item.product.id === (selectedProduct?.id || productFromQuery?.id))}
+        cartItems={cartItems}
         onPlaceOrder={handlePlaceOrder}
         fromCart={modalFromCart}
         fromSellerProfile={modalFromSellerProfile}

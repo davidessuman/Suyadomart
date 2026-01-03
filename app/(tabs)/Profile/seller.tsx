@@ -1,10 +1,11 @@
 // app/(tabs)/Profile/seller.tsx — WITH PROFESSIONAL PROFILE DESIGN
-import React, { useEffect, useState, useMemo, useCallback, createContext, useContext, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useAlert } from '../../alert/AlertProvider';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
   ActivityIndicator, SafeAreaView, Dimensions, TextInput,
   Modal, KeyboardAvoidingView, Platform, FlatList,
-  RefreshControl, useColorScheme, Linking, Clipboard, StatusBar,
+  RefreshControl, useColorScheme, Linking, StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
@@ -16,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ClipboardExpo from 'expo-clipboard';
 
 const { width, height } = Dimensions.get('window');
-const isTablet = width >= 768;
+// const isTablet = width >= 768;
 const isDesktop = width >= 1024;
 // Color scheme definitions
 const lightColors = {
@@ -141,210 +142,7 @@ interface AlertData {
   onClose?: () => void;
 }
 
-interface AlertContextType {
-  showAlert: (data: Omit<AlertData, 'id'>) => void;
-  showConfirmation: (data: Omit<AlertData, 'id' | 'type'>) => void;
-}
 
-const AlertContext = createContext<AlertContextType | undefined>(undefined);
-
-export const useAlert = () => {
-  const context = useContext(AlertContext);
-  if (!context) {
-    throw new Error('useAlert must be used within AlertProvider');
-  }
-  return context;
-};
-
-const AlertProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const colorScheme = useColorScheme();
-  const themeColors = colorScheme === 'dark' ? darkColors : lightColors;
-  
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
-  const [currentAlert, setCurrentAlert] = useState<AlertData | null>(null);
-
-  const showAlert = useCallback((data: Omit<AlertData, 'id'>) => {
-    const id = Date.now().toString();
-    const newAlert: AlertData = { ...data, id };
-    setAlerts(prev => [...prev, newAlert]);
-  }, []);
-
-  const showConfirmation = useCallback((data: Omit<AlertData, 'id' | 'type'>) => {
-    showAlert({ ...data, type: 'confirm' });
-  }, [showAlert]);
-
-  const removeAlert = useCallback((id: string) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== id));
-    setCurrentAlert(null);
-  }, []);
-
-  const handleClose = useCallback((alert: AlertData) => {
-    alert.onClose?.();
-    removeAlert(alert.id);
-  }, [removeAlert]);
-
-  const handleConfirm = useCallback((alert: AlertData) => {
-    alert.onConfirm?.();
-    removeAlert(alert.id);
-  }, [removeAlert]);
-
-  const handleCancel = useCallback((alert: AlertData) => {
-    alert.onCancel?.();
-    removeAlert(alert.id);
-  }, [removeAlert]);
-
-  // Show next alert when current one is closed
-  useEffect(() => {
-    if (!currentAlert && alerts.length > 0) {
-      setCurrentAlert(alerts[0]);
-    }
-  }, [currentAlert, alerts]);
-
-  const getAlertStyles = (type: AlertType) => {
-    switch (type) {
-      case 'success':
-        return { backgroundColor: themeColors.success, icon: 'checkmark-circle' };
-      case 'error':
-        return { backgroundColor: themeColors.error, icon: 'close-circle' };
-      case 'warning':
-        return { backgroundColor: themeColors.warning, icon: 'warning' };
-      case 'confirm':
-        return { backgroundColor: themeColors.primary, icon: 'help-circle' };
-      default:
-        return { backgroundColor: themeColors.info, icon: 'information-circle' };
-    }
-  };
-
-  return (
-    <AlertContext.Provider value={{ showAlert, showConfirmation }}>
-      {children}
-      
-      {/* Custom Alert Modal - Fixed with overFullScreen to appear on top of all modals */}
-      <Modal
-        visible={!!currentAlert}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        presentationStyle="overFullScreen"
-        onRequestClose={() => currentAlert && handleClose(currentAlert)}
-      >
-        <View style={[alertStyles.overlay, { backgroundColor: themeColors.modalOverlay, zIndex: 9999 }]}>
-          <View style={[alertStyles.container, { backgroundColor: themeColors.card, zIndex: 10000 }]}>
-            {currentAlert && (
-              <>
-                <View style={[alertStyles.header, { backgroundColor: getAlertStyles(currentAlert.type).backgroundColor }]}>
-                  <Ionicons 
-                    name={getAlertStyles(currentAlert.type).icon as any} 
-                    size={32} 
-                    color="#FFF" 
-                  />
-                  <Text style={alertStyles.title}>{currentAlert.title}</Text>
-                </View>
-                
-                <View style={alertStyles.content}>
-                  <Text style={[alertStyles.message, { color: themeColors.text }]}>{currentAlert.message}</Text>
-                </View>
-                
-                <View style={[alertStyles.actions, { borderTopColor: themeColors.border }]}>
-                  {currentAlert.type === 'confirm' ? (
-                    <>
-                      <TouchableOpacity
-                        style={[alertStyles.button, alertStyles.cancelButton, { backgroundColor: themeColors.inputBackground }]}
-                        onPress={() => handleCancel(currentAlert)}
-                      >
-                        <Text style={[alertStyles.buttonText, alertStyles.cancelButtonText, { color: themeColors.info }]}>
-                          {currentAlert.cancelText || 'Cancel'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[alertStyles.button, alertStyles.confirmButton, { backgroundColor: themeColors.info }]}
-                        onPress={() => handleConfirm(currentAlert)}
-                      >
-                        <Text style={[alertStyles.buttonText, alertStyles.confirmButtonText]}>
-                          {currentAlert.confirmText || 'OK'}
-                        </Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <TouchableOpacity
-                      style={[alertStyles.button, { backgroundColor: getAlertStyles(currentAlert.type).backgroundColor }]}
-                      onPress={() => handleClose(currentAlert)}
-                    >
-                      <Text style={[alertStyles.buttonText, { color: '#FFF' }]}>OK</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-    </AlertContext.Provider>
-  );
-};
-
-const alertStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  },
-  container: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    gap: 12,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFF',
-    flex: 1,
-  },
-  content: {
-    padding: 24,
-  },
-  message: {
-    fontSize: 16,
-    lineHeight: 24,
-    textAlign: 'center',
-  },
-  actions: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  cancelButton: {},
-  confirmButton: {},
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cancelButtonText: {},
-  confirmButtonText: {
-    color: '#FFF',
-  },
-});
 
 // Size options
 const sizeOptions = {
@@ -1802,50 +1600,61 @@ function SellerDashboardContent() {
 
   // Orders Modal
   const renderOrdersModal = () => (
-    <Modal visible={ordersModalVisible} animationType="slide" presentationStyle={isDesktop ? "formSheet" : "pageSheet"} onRequestClose={() => setOrdersModalVisible(false)}>
-      <SafeAreaView style={[styles.ordersContainer, { backgroundColor: themeColors.background }]}>
-        <View style={[styles.ordersHeader, { borderBottomColor: themeColors.border }]}>
-          <TouchableOpacity style={styles.closeButton} onPress={() => setOrdersModalVisible(false)}>
-            <Ionicons name="close" size={28} color={themeColors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.ordersTitle, { color: themeColors.text }]}>Orders ({orders.length})</Text>
-          {pendingOrdersCount > 0 && (
-            <View style={[styles.notificationBadgeHeader, { backgroundColor: themeColors.error }]}>
-              <Text style={styles.notificationTextHeader}>{pendingOrdersCount}</Text>
+    ordersModalVisible && (
+      <View style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9998,
+        backgroundColor: themeColors.modalOverlay,
+        justifyContent: 'flex-end',
+      }}>
+        <SafeAreaView style={[styles.ordersContainer, { backgroundColor: themeColors.background, flex: 1 }]}> 
+          <View style={[styles.ordersHeader, { borderBottomColor: themeColors.border }]}> 
+            <TouchableOpacity style={styles.closeButton} onPress={() => setOrdersModalVisible(false)}>
+              <Ionicons name="close" size={28} color={themeColors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.ordersTitle, { color: themeColors.text }]}>Orders ({orders.length})</Text>
+            {pendingOrdersCount > 0 && (
+              <View style={[styles.notificationBadgeHeader, { backgroundColor: themeColors.error }]}> 
+                <Text style={styles.notificationTextHeader}>{pendingOrdersCount}</Text>
+              </View>
+            )}
+          </View>
+          {ordersLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={themeColors.primary} />
+              <Text style={{ marginTop: 10, color: themeColors.textSecondary }}>Loading orders...</Text>
             </View>
-          )}
-        </View>
-        {ordersLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={themeColors.primary} />
-            <Text style={{ marginTop: 10, color: themeColors.textSecondary }}>Loading orders...</Text>
-          </View>
-        ) : orders.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <Ionicons name="receipt-outline" size={80} color={themeColors.textTertiary} />
-            <Text style={[styles.emptyStateText, { color: themeColors.textSecondary }]}>No orders yet</Text>
-            <Text style={{ color: themeColors.textTertiary, marginTop: 8, textAlign: 'center' }}>
-              When buyers purchase your products,{'\n'}their orders will appear here
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={orders}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.ordersListContainer}
-            renderItem={renderOrderItem}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshingOrders}
-                onRefresh={onRefreshOrders}
-                colors={[themeColors.primary]}
+          ) : orders.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <Ionicons name="receipt-outline" size={80} color={themeColors.textTertiary} />
+              <Text style={[styles.emptyStateText, { color: themeColors.textSecondary }]}>No orders yet</Text>
+              <Text style={{ color: themeColors.textTertiary, marginTop: 8, textAlign: 'center' }}>
+                When buyers purchase your products,{"\n"}their orders will appear here
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={orders}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.ordersListContainer}
+              renderItem={renderOrderItem}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshingOrders}
+                  onRefresh={onRefreshOrders}
+                  colors={[themeColors.primary]}
+                />
+              }
             />
-            }
-          />
-        )}
-      </SafeAreaView>
-    </Modal>
+          )}
+        </SafeAreaView>
+      </View>
+    )
   );
 
   // NEW: Color Media Assignment Modal
@@ -3662,8 +3471,17 @@ function SellerDashboardContent() {
         initialIndex={fullViewerIndex}
       />
      
-      {/* Add Product Modal - FIXED: Added proper zIndex to ensure alerts show on top */}
-      <Modal visible={addProductModal} animationType="slide" presentationStyle={isDesktop ? "formSheet" : "pageSheet"} statusBarTranslucent={true}>
+      {/* Add Product Modal - Custom Overlay Implementation */}
+      {addProductModal && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9998,
+          backgroundColor: themeColors.modalOverlay,
+        }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: themeColors.background }}>
           <View style={[styles.modalHeader, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
             <TouchableOpacity onPress={closeAddProductModal}><Text style={[styles.cancelText, { color: themeColors.textSecondary }]}>Cancel</Text></TouchableOpacity>
@@ -3898,7 +3716,8 @@ function SellerDashboardContent() {
             <View style={{ height: 150 }} />
           </ScrollView>
         </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      )}
      
       {/* Edit Profile Modal with Integrated University Dropdown */}
       <Modal visible={editModalVisible} animationType="slide" presentationStyle={isDesktop ? "formSheet" : "pageSheet"}>
@@ -4105,11 +3924,9 @@ function SellerDashboardContent() {
 // ==================== MAIN EXPORT ====================
 export default function SellerDashboard() {
   return (
-    <AlertProvider>
-      <View style={{ flex: 1 }}>
-        <SellerDashboardContent />
-      </View>
-    </AlertProvider>
+    <View style={{ flex: 1 }}>
+      <SellerDashboardContent />
+    </View>
   );
 }
 // Full screen media viewer used by seller page
