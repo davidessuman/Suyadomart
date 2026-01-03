@@ -26,10 +26,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { formatDistanceToNow, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, isWithinInterval, format, addDays, subDays } from 'date-fns';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const SUPABASE_PROJECT_REF = 'qwujadyqebfypyhfuwfl';
@@ -4880,6 +4882,7 @@ const ProductDetailModal: React.FC<{
   const [fullProductData, setFullProductData] = useState<any>(null);
   const [loadingProductDetails, setLoadingProductDetails] = useState(false);
   const [colorSpecificMedia, setColorSpecificMedia] = useState<string[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { width } = useWindowDimensions();
     // Update colorSpecificMedia when selectedColor or fullProductData changes
     useEffect(() => {
@@ -5000,6 +5003,13 @@ const ProductDetailModal: React.FC<{
       setCurrentMediaIndex(0);
       setSelectedColor('');
       setSelectedSize('');
+      
+      // Fetch current user ID for reviews section
+      const fetchUserId = async () => {
+        const { data } = await supabase.auth.getUser();
+        setCurrentUserId(data?.user?.id ?? null);
+      };
+      fetchUserId();
     }
   }, [isVisible, product]);
 
@@ -5465,6 +5475,16 @@ const ProductDetailModal: React.FC<{
                     </Text>
                   </View>
                 </View>
+                
+                {/* Reviews Section - BEFORE Similar Products */}
+                {displayProduct.id && (
+                  <ProductReviewsSection
+                    productId={displayProduct.id}
+                    currentUserId={currentUserId}
+                    theme={theme}
+                    showAlert={showAlert}
+                  />
+                )}
                 
                 {/* Similar Products Section */}
                 <SimilarProductsSection
@@ -6282,6 +6302,21 @@ export default function BuyerScreen() {
     getCartTotal,
     loadCart,
   } = useCart();
+
+  // Pause all videos when tab loses focus
+  useFocusEffect(
+    useCallback(() => {
+      // Tab is focused - resume is handled by individual components
+      return () => {
+        // Tab is blurred - pause all videos
+        Object.values(videoRefs.current).forEach(ref => {
+          if (ref && typeof ref.pauseAsync === 'function') {
+            ref.pauseAsync().catch(() => {});
+          }
+        });
+      };
+    }, [])
+  );
 
   // Custom Alert Functions
   const showAlert = (title: string, message: string, buttons = [{ text: 'OK', onPress: () => {} }]) => {

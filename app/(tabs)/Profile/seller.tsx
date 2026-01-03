@@ -175,7 +175,7 @@ const categoryStructure = {
   Sports: ['Gym Wear', 'Equipment', 'Footwear', 'Accessories'],
   Books: ['Textbooks', 'Novels', 'Magazines', 'Comics'],
   Food: ['Snacks', 'Drinks', 'Homemade Meals'],
-  Services: ['Tutoring', 'Photography', 'Graphic Design', 'Writing', 'Delivery', 'Repair', 'Beauty Services', 'Fitness Training', 'Other Services'],
+  Services: ['Tutoring', 'Photography', 'Graphic Design', 'Writing', 'Delivery', 'Repair', 'Fitness Training', 'Beauty Services', 'Other Services'],
   Other: ['Everything else'],
 };
 
@@ -589,6 +589,7 @@ function SellerDashboardContent() {
   const [sellingPrice, setSellingPrice] = useState('');
   const [mainCategory, setMainCategory] = useState<MainCategory | ''>('');
   const [subCategory, setSubCategory] = useState<SubCategory | ''>('');
+  const [tertiaryCategory, setTertiaryCategory] = useState<string>('');
   const [productGender, setProductGender] = useState<'Men' | 'Women' | 'Unisex' | 'Kids' | 'Others' | ''>('');
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [sizeStock, setSizeStock] = useState<Record<string, string>>({});
@@ -3537,7 +3538,7 @@ function SellerDashboardContent() {
               <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Main Category *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
                 {Object.keys(categoryStructure).map((cat) => (
-                  <TouchableOpacity key={cat} style={[styles.categoryChip, mainCategory === cat && [styles.categoryChipActive, { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }], { backgroundColor: themeColors.chipBackground }]} onPress={() => { setMainCategory(cat as MainCategory); setSubCategory(''); setProductGender(''); setSelectedSizes([]); setSizeStock({}); setGeneralStock(''); setBrand(''); setProductColors([]); setColorStock({}); setColorMediaAssignments({}); }}>
+                  <TouchableOpacity key={cat} style={[styles.categoryChip, mainCategory === cat && [styles.categoryChipActive, { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }], { backgroundColor: themeColors.chipBackground }]} onPress={() => { setMainCategory(cat as MainCategory); setSubCategory(''); setTertiaryCategory(''); setProductGender(''); setSelectedSizes([]); setSizeStock({}); setGeneralStock(''); setBrand(''); setProductColors([]); setColorStock({}); setColorMediaAssignments({}); }}>
                     <Text style={[styles.categoryText, mainCategory === cat && [styles.categoryTextActive, { color: themeColors.primary }], { color: themeColors.text }]}>{cat}</Text>
                   </TouchableOpacity>
                 ))}
@@ -3548,8 +3549,20 @@ function SellerDashboardContent() {
                 <Text style={[styles.sectionTitle, { color: themeColors.text }]}>{mainCategory === 'Fashion' || mainCategory === 'Sports' ? 'Item Type *' : mainCategory === 'Services' ? 'Service Type *' : 'Sub-category *'}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
                   {categoryStructure[mainCategory].map((sub) => (
-                    <TouchableOpacity key={sub} style={[styles.categoryChip, subCategory === sub && [styles.categoryChipActive, { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }], { backgroundColor: themeColors.chipBackground }]} onPress={() => { setSubCategory(sub); setSelectedSizes([]); setSizeStock({}); setGeneralStock(''); setBrand(''); setProductColors([]); setColorStock({}); setColorMediaAssignments({}); }}>
+                    <TouchableOpacity key={sub} style={[styles.categoryChip, subCategory === sub && [styles.categoryChipActive, { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }], { backgroundColor: themeColors.chipBackground }]} onPress={() => { setSubCategory(sub); setTertiaryCategory(''); setSelectedSizes([]); setSizeStock({}); setGeneralStock(''); setBrand(''); setProductColors([]); setColorStock({}); setColorMediaAssignments({}); }}>
                       <Text style={[styles.categoryText, subCategory === sub && [styles.categoryTextActive, { color: themeColors.primary }], { color: themeColors.text }]}>{sub}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            {subCategory === 'Beauty Services' && (
+              <View style={[styles.sectionContainer, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+                <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Beauty Service Type *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                  {['Makeup Application', 'Hair Services', 'Barbering', 'Facials & Skincare', 'Nails (Manicure/Pedicure)', 'Waxing', 'Threading', 'Massage & Spa', 'Tattoo', 'Piercing', 'Other Beauty Services'].map((tertiary) => (
+                    <TouchableOpacity key={tertiary} style={[styles.categoryChip, tertiaryCategory === tertiary && [styles.categoryChipActive, { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }], { backgroundColor: themeColors.chipBackground }]} onPress={() => { setTertiaryCategory(tertiary); }}>
+                      <Text style={[styles.categoryText, tertiaryCategory === tertiary && [styles.categoryTextActive, { color: themeColors.primary }], { color: themeColors.text }]}>{tertiary}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>

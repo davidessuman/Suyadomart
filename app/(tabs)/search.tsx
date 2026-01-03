@@ -32,6 +32,7 @@ import { formatDistanceToNow } from 'date-fns';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
+import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const PRIMARY_COLOR = '#F68B1E';
@@ -40,6 +41,29 @@ const LIGHT_BACKGROUND = '#FFFFFF';
 const DARK_BACKGROUND = '#121212';
 const LIGHT_TEXT = '#333333';
 const DARK_TEXT = '#FFFFFF';
+
+// === CATEGORY STRUCTURE ===
+const categoryStructure = {
+  Fashion: ['Dresses', 'Tops & Shirts', 'Pants & Jeans', 'Skirts', 'Jackets', 'Footwear', 'Bags', 'Watches', 'Jewelry', 'Accessories', 'Other Fashion'],
+  Electronics: ['Phones', 'Laptops', 'Tablets', 'Headphones', 'Chargers', 'Gaming', 'Accessories', 'Other Electronics'],
+  Beauty: ['Skincare', 'Makeup', 'Hair Care', 'Fragrance', 'Tools'],
+  Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
+  Sports: ['Gym Wear', 'Equipment', 'Footwear', 'Accessories'],
+  Books: ['Textbooks', 'Novels', 'Magazines', 'Comics'],
+  Food: ['Snacks', 'Drinks', 'Homemade Meals'],
+  Services: [
+    'Tutoring',
+    'Photography',
+    'Graphic Design',
+    'Writing',
+    'Delivery',
+    'Repair',
+    'Fitness Training',
+    'Beauty Services',
+    'Other Services',
+  ],
+  Other: ['Everything else'],
+};
 
 // === ALERT BUTTON INTERFACE ===
 interface AlertButton {
@@ -2499,7 +2523,19 @@ const ProductDetailModal: React.FC<{
   const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
   const [selectedSize, setSelectedSize] = useState<string | undefined>(undefined);
   const [quantity, setQuantity] = useState(1);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const colorScheme = useColorScheme();
+
+  // Fetch current user ID
+  useEffect(() => {
+    const fetchUserId = async () => {
+      const userId = await getCurrentUserId();
+      setCurrentUserId(userId);
+    };
+    if (isVisible) {
+      fetchUserId();
+    }
+  }, [isVisible]);
 
   // Desktop responsiveness
   const isLargeScreen = width >= 768;
@@ -2840,6 +2876,21 @@ const getAvailableStock = () => {
                 </View>
               </View>
               
+              {/* Reviews Section - BEFORE Similar Products */}
+              {product.id && (
+                <ProductReviewsSection
+                  productId={product.id}
+                  currentUserId={currentUserId}
+                  theme={{
+                    card: cardBackground,
+                    text: textColor,
+                    textSecondary: isDark ? '#bbb' : '#666',
+                    border: borderColor,
+                  }}
+                  showAlert={showAlert}
+                />
+              )}
+              
               {/* Enhanced Similar Products Section */}
               <EnhancedSimilarProductsSection
                 product={product}
@@ -2988,6 +3039,7 @@ const getCategoryIcon = (category: string) => {
     'fashion': 'shirt-outline',
     'electronics': 'phone-portrait-outline',
     'beauty': 'sparkles-outline',
+    'beauty services': 'sparkles-outline',
     'home': 'home-outline',
     'sports': 'basketball-outline',
     'books': 'book-outline',
@@ -3016,15 +3068,31 @@ const ProfessionalCategoriesDrawer: React.FC<{
   onClose: () => void;
   categories: string[];
   onSelectCategory: (category: string | null) => void;
+  onSelectSubCategory: (subCategory: string | null) => void;
   selectedCategory: string | null;
+  selectedSubCategory: string | null;
   showAlert: (title: string, message: string, buttons?: AlertButton[]) => void;
-}> = ({ visible, onClose, categories, onSelectCategory, selectedCategory, showAlert }) => {
+}> = ({ visible, onClose, categories, onSelectCategory, onSelectSubCategory, selectedCategory, selectedSubCategory, showAlert }) => {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    main: true,
-    popular: true,
-    other: false,
+    products: true,
+    services: true,
   });
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const colorScheme = useColorScheme();
+
+  // Reset expanded state when drawer opens
+  React.useEffect(() => {
+    if (visible) {
+      setExpandedSections({
+        products: true,
+        services: true,
+      });
+      // Expand the currently selected category
+      if (selectedCategory) {
+        setExpandedCategories({ [selectedCategory]: true });
+      }
+    }
+  }, [visible]);
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
@@ -3033,14 +3101,26 @@ const ProfessionalCategoriesDrawer: React.FC<{
     }));
   };
 
-  // Group categories by type for better organization
-  const popularCategories = ['Fashion', 'Electronics', 'Beauty', 'Home', 'Sports', 'Books', 'Food', 'Services'];
-  const mainCategories = ['All Categories', 'Featured', 'Trending', 'Recently Added'];
-  
-  const otherCategories = categories.filter(cat => 
-    !popularCategories.includes(cat) && 
-    !mainCategories.includes(cat.toLowerCase())
-  );
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  // Group categories by type
+  const productCategories = ['Fashion', 'Electronics', 'Beauty', 'Home', 'Sports', 'Books', 'Food', 'Other'];
+  const serviceCategories = [
+    'Tutoring',
+    'Photography',
+    'Graphic Design',
+    'Writing',
+    'Delivery',
+    'Repair',
+    'Fitness Training',
+    'Beauty Services',
+    'Other Services',
+  ];
 
   if (!visible) return null;
 
@@ -3079,199 +3159,309 @@ const ProfessionalCategoriesDrawer: React.FC<{
           </View>
 
           <ScrollView style={styles.drawerContent} showsVerticalScrollIndicator={false}>
-            {/* Main Categories Section */}
+            {/* All Categories Option */}
             <View style={styles.drawerSection}>
-              <TouchableOpacity 
-                style={[styles.sectionHeaderButton, { 
-                  backgroundColor: isDark ? '#252525' : '#f9f9f9',
-                  borderColor 
+              <TouchableOpacity
+                style={[styles.drawerItem, !selectedCategory && styles.drawerItemActive, {
+                  backgroundColor: cardBackground,
+                  borderColor,
+                  marginBottom: 12,
                 }]}
-                onPress={() => toggleSection('main')}
+                onPress={() => {
+                  onSelectCategory(null);
+                  onClose();
+                }}
               >
-                <Text style={[styles.drawerSectionTitle, { color: textColor }]}>MAIN CATEGORIES</Text>
-                <Ionicons 
-                  name={expandedSections.main ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color={PRIMARY_COLOR} 
-                />
-              </TouchableOpacity>
-              
-              {expandedSections.main && (
-                <View style={styles.sectionContent}>
-                  <TouchableOpacity
-                    style={[styles.drawerItem, !selectedCategory && styles.drawerItemActive, {
-                      backgroundColor: cardBackground,
-                      borderColor
-                    }]}
-                    onPress={() => {
-                      onSelectCategory(null);
-                      onClose();
-                    }}
-                  >
-                    <View style={[styles.drawerItemIconContainer, !selectedCategory && styles.drawerItemIconActive]}>
-                      <Ionicons name="apps" size={22} color={!selectedCategory ? PRIMARY_COLOR : textColor} />
-                    </View>
-                    <Text style={[styles.drawerItemText, !selectedCategory && styles.drawerItemTextActive, { color: textColor }]}>
-                      All Categories
-                    </Text>
-                    {!selectedCategory && (
-                      <Ionicons name="checkmark-circle" size={20} color={PRIMARY_COLOR} />
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.drawerItem, {
-                      backgroundColor: cardBackground,
-                      borderColor
-                    }]}
-                    onPress={() => {
-                      showAlert('Featured', 'Featured products coming soon!');
-                    }}
-                  >
-                    <View style={styles.drawerItemIconContainer}>
-                      <Ionicons name="star" size={22} color="#FFD700" />
-                    </View>
-                    <Text style={[styles.drawerItemText, { color: textColor }]}>
-                      Featured Products
-                    </Text>
-                    <Ionicons name="chevron-forward" size={18} color={PRIMARY_COLOR} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.drawerItem, {
-                      backgroundColor: cardBackground,
-                      borderColor
-                    }]}
-                    onPress={() => {
-                      showAlert('Trending', 'Trending products coming soon!');
-                    }}
-                  >
-                    <View style={styles.drawerItemIconContainer}>
-                      <Ionicons name="trending-up" size={22} color="#FF4081" />
-                    </View>
-                    <Text style={[styles.drawerItemText, { color: textColor }]}>
-                      Trending Now
-                    </Text>
-                    <Ionicons name="chevron-forward" size={18} color={PRIMARY_COLOR} />
-                  </TouchableOpacity>
+                <View style={[styles.drawerItemIconContainer, !selectedCategory && styles.drawerItemIconActive]}>
+                  <Ionicons name="apps" size={22} color={!selectedCategory ? PRIMARY_COLOR : textColor} />
                 </View>
-              )}
+                <Text style={[styles.drawerItemText, !selectedCategory && styles.drawerItemTextActive, { color: textColor }]}>
+                  All Categories
+                </Text>
+                {!selectedCategory && (
+                  <Ionicons name="checkmark-circle" size={20} color={PRIMARY_COLOR} />
+                )}
+              </TouchableOpacity>
             </View>
 
-            {/* Popular Categories Section */}
+            {/* Products Section */}
             <View style={styles.drawerSection}>
               <TouchableOpacity 
                 style={[styles.sectionHeaderButton, { 
                   backgroundColor: isDark ? '#252525' : '#f9f9f9',
                   borderColor 
                 }]}
-                onPress={() => toggleSection('popular')}
+                onPress={() => toggleSection('products')}
               >
-                <Text style={[styles.drawerSectionTitle, { color: textColor }]}>POPULAR CATEGORIES</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="cart" size={20} color={PRIMARY_COLOR} style={{ marginRight: 8 }} />
+                  <Text style={[styles.drawerSectionTitle, { color: textColor }]}>PRODUCTS</Text>
+                </View>
                 <Ionicons 
-                  name={expandedSections.popular ? "chevron-up" : "chevron-down"} 
+                  name={expandedSections.products ? "chevron-up" : "chevron-down"} 
                   size={20} 
                   color={PRIMARY_COLOR} 
                 />
               </TouchableOpacity>
               
-              {expandedSections.popular && (
+              {expandedSections.products && (
                 <View style={styles.sectionContent}>
-                  {popularCategories.map((category) => {
+                  {productCategories.map((category) => {
                     const isSelected = selectedCategory === category;
+                    const isCategoryExpanded = expandedCategories[category];
+                    const subCategories = categoryStructure[category as keyof typeof categoryStructure] || [];
+                    
                     return (
-                      <TouchableOpacity
-                        key={category}
-                        style={[styles.drawerItem, isSelected && styles.drawerItemActive, {
-                          backgroundColor: cardBackground,
-                          borderColor
-                        }]}
-                        onPress={() => {
-                          onSelectCategory(category);
-                          onClose();
-                        }}
-                      >
-                        <View style={[styles.drawerItemIconContainer, isSelected && styles.drawerItemIconActive]}>
-                          <Ionicons 
-                            name={getCategoryIcon(category)} 
-                            size={20} 
-                            color={isSelected ? PRIMARY_COLOR : textColor} 
-                          />
+                      <View key={category}>
+                        <View>
+                          <View style={{ flexDirection: 'row', gap: 8 }}>
+                            {/* Main category button - selects the category */}
+                            <TouchableOpacity
+                              style={[styles.drawerItem, isSelected && !selectedSubCategory && styles.drawerItemActive, {
+                                backgroundColor: cardBackground,
+                                borderColor,
+                                flex: 1
+                              }]}
+                              onPress={() => {
+                                onSelectCategory(category);
+                                onSelectSubCategory(null);
+                                onClose();
+                              }}
+                            >
+                              <View style={[styles.drawerItemIconContainer, isSelected && !selectedSubCategory && styles.drawerItemIconActive]}>
+                                <Ionicons 
+                                  name={getCategoryIcon(category)} 
+                                  size={20} 
+                                  color={isSelected && !selectedSubCategory ? PRIMARY_COLOR : textColor} 
+                                />
+                              </View>
+                              <Text style={[styles.drawerItemText, isSelected && !selectedSubCategory && styles.drawerItemTextActive, { color: textColor }]}>
+                                {category}
+                              </Text>
+                              {isSelected && !selectedSubCategory && (
+                                <Ionicons name="checkmark-circle" size={20} color={PRIMARY_COLOR} style={{ marginLeft: 'auto' }} />
+                              )}
+                            </TouchableOpacity>
+
+                            {/* Toggle sub-categories button */}
+                            {subCategories.length > 0 && (
+                              <TouchableOpacity
+                                style={[styles.drawerItem, {
+                                  backgroundColor: cardBackground,
+                                  borderColor,
+                                  paddingHorizontal: 12,
+                                  width: 50
+                                }]}
+                                onPress={() => toggleCategory(category)}
+                              >
+                                <Ionicons 
+                                  name={isCategoryExpanded ? "chevron-up" : "chevron-down"} 
+                                  size={20} 
+                                  color={PRIMARY_COLOR}
+                                  style={{ marginLeft: 'auto', marginRight: 'auto' }}
+                                />
+                              </TouchableOpacity>
+                            )}
+                          </View>
                         </View>
-                        <Text style={[styles.drawerItemText, isSelected && styles.drawerItemTextActive, { color: textColor }]}>
-                          {category}
-                        </Text>
-                        {isSelected ? (
-                          <Ionicons name="checkmark-circle" size={20} color={PRIMARY_COLOR} />
-                        ) : (
-                          <View style={[styles.categoryCountBadge, { backgroundColor: isDark ? '#333' : '#e0e0e0' }]}>
-                            
+                        
+                        {/* Sub-categories */}
+                        {isCategoryExpanded && subCategories.length > 0 && (
+                          <View style={{ paddingLeft: 30 }}>
+                            {subCategories.map((subCategory) => {
+                              const isSubSelected = selectedCategory === category && selectedSubCategory === subCategory;
+                              return (
+                                <TouchableOpacity
+                                  key={subCategory}
+                                  style={[styles.drawerItem, isSubSelected && styles.drawerItemActive, {
+                                    backgroundColor: cardBackground,
+                                    borderColor,
+                                    marginLeft: 10,
+                                  }]}
+                                  onPress={() => {
+                                    onSelectCategory(category);
+                                    onSelectSubCategory(subCategory);
+                                    onClose();
+                                  }}
+                                >
+                                  <View style={[styles.drawerItemIconContainer, isSubSelected && styles.drawerItemIconActive]}>
+                                    <Ionicons 
+                                      name="pricetag-outline" 
+                                      size={16} 
+                                      color={isSubSelected ? PRIMARY_COLOR : textColor} 
+                                    />
+                                  </View>
+                                  <Text style={[styles.drawerItemText, isSubSelected && styles.drawerItemTextActive, { color: textColor, fontSize: 13 }]}>
+                                    {subCategory}
+                                  </Text>
+                                  {isSubSelected && (
+                                    <Ionicons name="checkmark-circle" size={18} color={PRIMARY_COLOR} />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
                           </View>
                         )}
-                      </TouchableOpacity>
+                      </View>
                     );
                   })}
                 </View>
               )}
             </View>
 
-            {/* Other Categories Section */}
-            {otherCategories.length > 0 && (
-              <View style={styles.drawerSection}>
-                <TouchableOpacity 
-                  style={[styles.sectionHeaderButton, { 
-                    backgroundColor: isDark ? '#252525' : '#f9f9f9',
-                    borderColor 
-                  }]}
-                  onPress={() => toggleSection('other')}
-                >
-                  <Text style={[styles.drawerSectionTitle, { color: textColor }]}>OTHER CATEGORIES ({otherCategories.length})</Text>
-                  <Ionicons 
-                    name={expandedSections.other ? "chevron-up" : "chevron-down"} 
-                    size={20} 
-                    color={PRIMARY_COLOR} 
-                  />
-                </TouchableOpacity>
-                
-                {expandedSections.other && (
-                  <View style={styles.sectionContent}>
-                    {otherCategories.map((category) => {
-                      const isSelected = selectedCategory === category;
-                      return (
-                        <TouchableOpacity
-                          key={category}
-                          style={[styles.drawerItem, isSelected && styles.drawerItemActive, {
-                            backgroundColor: cardBackground,
-                            borderColor
-                          }]}
-                          onPress={() => {
-                            onSelectCategory(category);
-                            onClose();
-                          }}
-                        >
-                          <View style={[styles.drawerItemIconContainer, isSelected && styles.drawerItemIconActive]}>
-                            <Ionicons 
-                              name={getCategoryIcon(category)} 
-                              size={20} 
-                              color={isSelected ? PRIMARY_COLOR : textColor} 
-                            />
-                          </View>
-                          <Text style={[styles.drawerItemText, isSelected && styles.drawerItemTextActive, { color: textColor }]}>
-                            {category}
-                          </Text>
-                          {isSelected && (
-                            <Ionicons name="checkmark-circle" size={20} color={PRIMARY_COLOR} />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            )}
+            {/* Services Section */}
+            <View style={styles.drawerSection}>
+              <TouchableOpacity 
+                style={[styles.sectionHeaderButton, { 
+                  backgroundColor: isDark ? '#252525' : '#f9f9f9',
+                  borderColor 
+                }]}
+                onPress={() => toggleSection('services')}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="briefcase" size={20} color={PRIMARY_COLOR} style={{ marginRight: 8 }} />
+                  <Text style={[styles.drawerSectionTitle, { color: textColor }]}>SERVICES</Text>
+                </View>
+                <Ionicons 
+                  name={expandedSections.services ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color={PRIMARY_COLOR} 
+                />
+              </TouchableOpacity>
+              
+              {expandedSections.services && (
+                <View style={styles.sectionContent}>
+                  {serviceCategories.map((subCategory) => {
+                    const isSubSelected = selectedCategory === 'Services' && selectedSubCategory === subCategory;
+                    const isBeautyServices = subCategory === 'Beauty Services';
+                    const beautyServiceTypes = ['Makeup Application', 'Hair Services', 'Barbering', 'Facials & Skincare', 'Nails (Manicure/Pedicure)', 'Waxing', 'Threading', 'Massage & Spa', 'Tattoo', 'Piercing', 'Other Beauty Services'];
+                    
+                    return (
+                      <View key={subCategory}>
+                        {isBeautyServices ? (
+                          // Beauty Services with expandable sub-types
+                          <>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                              <TouchableOpacity
+                                style={[styles.drawerItem, isSubSelected && !expandedCategories['Beauty Services Tertiary'] && styles.drawerItemActive, {
+                                  backgroundColor: cardBackground,
+                                  borderColor,
+                                  flex: 1,
+                                }]}
+                                onPress={() => {
+                                  onSelectCategory('Services');
+                                  onSelectSubCategory(subCategory);
+                                  onClose();
+                                }}
+                              >
+                                <View style={[styles.drawerItemIconContainer, isSubSelected && !expandedCategories['Beauty Services Tertiary'] && styles.drawerItemIconActive]}>
+                                  <Ionicons 
+                                    name="pricetag-outline" 
+                                    size={16} 
+                                    color={isSubSelected && !expandedCategories['Beauty Services Tertiary'] ? PRIMARY_COLOR : textColor} 
+                                  />
+                                </View>
+                                <Text style={[styles.drawerItemText, isSubSelected && !expandedCategories['Beauty Services Tertiary'] && styles.drawerItemTextActive, { color: textColor, fontSize: 13 }]}>
+                                  {subCategory}
+                                </Text>
+                                {isSubSelected && !expandedCategories['Beauty Services Tertiary'] && (
+                                  <Ionicons name="checkmark-circle" size={18} color={PRIMARY_COLOR} style={{ marginLeft: 'auto' }} />
+                                )}
+                              </TouchableOpacity>
+                              
+                              {/* Toggle beauty services tertiary button */}
+                              <TouchableOpacity
+                                style={[styles.drawerItem, {
+                                  backgroundColor: cardBackground,
+                                  borderColor,
+                                  paddingHorizontal: 12,
+                                  width: 50,
+                                }]}
+                                onPress={() => toggleCategory('Beauty Services Tertiary')}
+                              >
+                                <Ionicons 
+                                  name={expandedCategories['Beauty Services Tertiary'] ? "chevron-up" : "chevron-down"} 
+                                  size={20} 
+                                  color={PRIMARY_COLOR}
+                                  style={{ marginLeft: 'auto', marginRight: 'auto' }}
+                                />
+                              </TouchableOpacity>
+                            </View>
+                            
+                            {/* Tertiary categories (Beauty Service types) */}
+                            {expandedCategories['Beauty Services Tertiary'] && (
+                              <View style={{ paddingLeft: 30 }}>
+                                {beautyServiceTypes.map((beautyType) => {
+                                  const isTertiarySelected = selectedCategory === 'Services' && selectedSubCategory === beautyType;
+                                  return (
+                                    <TouchableOpacity
+                                      key={beautyType}
+                                      style={[styles.drawerItem, isTertiarySelected && styles.drawerItemActive, {
+                                        backgroundColor: cardBackground,
+                                        borderColor,
+                                      }]}
+                                      onPress={() => {
+                                        onSelectCategory('Services');
+                                        onSelectSubCategory(beautyType);
+                                        onClose();
+                                      }}
+                                    >
+                                      <View style={[styles.drawerItemIconContainer, isTertiarySelected && styles.drawerItemIconActive]}>
+                                        <Ionicons 
+                                          name="ellipse-outline" 
+                                          size={12} 
+                                          color={isTertiarySelected ? PRIMARY_COLOR : textColor} 
+                                        />
+                                      </View>
+                                      <Text style={[styles.drawerItemText, isTertiarySelected && styles.drawerItemTextActive, { color: textColor, fontSize: 12 }]}>
+                                        {beautyType}
+                                      </Text>
+                                      {isTertiarySelected && (
+                                        <Ionicons name="checkmark-circle" size={16} color={PRIMARY_COLOR} />
+                                      )}
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </>
+                        ) : (
+                          // Regular service types (non-Beauty Services)
+                          <TouchableOpacity
+                            style={[styles.drawerItem, isSubSelected && styles.drawerItemActive, {
+                              backgroundColor: cardBackground,
+                              borderColor,
+                            }]}
+                            onPress={() => {
+                              onSelectCategory('Services');
+                              onSelectSubCategory(subCategory);
+                              onClose();
+                            }}
+                          >
+                            <View style={[styles.drawerItemIconContainer, isSubSelected && styles.drawerItemIconActive]}>
+                              <Ionicons 
+                                name="pricetag-outline" 
+                                size={16} 
+                                color={isSubSelected ? PRIMARY_COLOR : textColor} 
+                              />
+                            </View>
+                            <Text style={[styles.drawerItemText, isSubSelected && styles.drawerItemTextActive, { color: textColor, fontSize: 13 }]}>
+                              {subCategory}
+                            </Text>
+                            {isSubSelected && (
+                              <Ionicons name="checkmark-circle" size={18} color={PRIMARY_COLOR} />
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
 
             {/* Clear Filter Button */}
-            {selectedCategory && (
+            {(selectedCategory || selectedSubCategory) && (
               <View style={[styles.clearFilterContainer, { borderTopColor: borderColor }]}>
                 <TouchableOpacity
                   style={[styles.clearFilterButton, { 
@@ -3280,6 +3470,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
                   }]}
                   onPress={() => {
                     onSelectCategory(null);
+                    onSelectSubCategory(null);
                     onClose();
                   }}
                 >
@@ -3578,6 +3769,7 @@ export default function SearchScreen() {
   const [categoriesDrawerVisible, setCategoriesDrawerVisible] = useState(false);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  const [selectedSubCategoryFilter, setSelectedSubCategoryFilter] = useState<string | null>(null);
 
   // Custom Alert system
   const [alertVisible, setAlertVisible] = useState(false);
@@ -3594,6 +3786,14 @@ export default function SearchScreen() {
 
   const hideAlert = () => {
     setAlertVisible(false);
+  };
+
+  const handleHeaderPress = () => {
+    setSelectedCategoryFilter(null);
+    setSelectedSubCategoryFilter(null);
+    setSearchParams({ productName: '', category: '', shopName: '' });
+    setShowSuggestions(false);
+    loadInitialProducts();
   };
 
   // Cart hook - pass showAlert to it
@@ -3887,6 +4087,45 @@ export default function SearchScreen() {
     }
   };
 
+  const fetchAllCampusProducts = async () => {
+    try {
+      let query = supabase
+        .from('products')
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      if (data) {
+        const enrichedProducts = await enrichProductsWithSellerInfo(data as any);
+        
+        // Filter by university for non-sellers
+        let filteredProducts = enrichedProducts;
+        if (userUniversity && !isUserSeller) {
+          filteredProducts = enrichedProducts.filter(product => 
+            product.university === userUniversity
+          );
+        }
+        
+        // If user is seller, include their own products plus products from their university
+        if (isUserSeller && userId) {
+          filteredProducts = enrichedProducts.filter(product => 
+            product.seller_id === userId || product.university === userUniversity
+          );
+        }
+        
+        return filteredProducts;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching all campus products:', error);
+      return [];
+    }
+  };
+
   const loadInitialProducts = async () => {
     setInitialLoading(true);
     
@@ -3899,14 +4138,23 @@ export default function SearchScreen() {
     setFeaturedProducts(featured);
     setTrendingProducts(trending);
 
+    // Fetch all campus products for Home section or filtered products for specific category
     let query = supabase
       .from('products')
       .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
-      .order('created_at', { ascending: false })
-      .limit(50);
+      .order('created_at', { ascending: false });
 
+    // Only apply category filter when a specific category is selected
     if (selectedCategoryFilter) {
       query = query.eq('category', selectedCategoryFilter);
+      // If sub-category is selected, filter by sub-category
+      if (selectedSubCategoryFilter) {
+        query = query.eq('sub_category', selectedSubCategoryFilter);
+      }
+      query = query.limit(50);
+    } else {
+      // For Home section, fetch more products (all products from campus)
+      query = query.limit(200);
     }
 
     const { data } = await query;
@@ -3929,7 +4177,7 @@ export default function SearchScreen() {
         );
       }
       
-      const grouped = groupByCategory(filteredProducts);
+      const grouped = groupByCategory(filteredProducts, selectedCategoryFilter);
       setSections(grouped);
     }
     setInitialLoading(false);
@@ -3996,7 +4244,7 @@ export default function SearchScreen() {
       loadInitialProducts();
       loadCart();
     }
-  }, [selectedCategoryFilter, userUniversity]);
+  }, [selectedCategoryFilter, selectedSubCategoryFilter, userUniversity]);
 
   // Advanced search function
   const advancedSearchProducts = async (params: typeof searchParams) => {
@@ -4068,7 +4316,7 @@ export default function SearchScreen() {
           );
         }
         
-        const grouped = groupByCategory(filteredProducts);
+        const grouped = groupByCategory(filteredProducts, selectedCategoryFilter);
         setSections(grouped);
         
         // Don't show featured/trending when searching
@@ -4134,7 +4382,7 @@ export default function SearchScreen() {
           );
         }
         
-        const grouped = groupByCategory(filteredProducts);
+        const grouped = groupByCategory(filteredProducts, selectedCategoryFilter);
         setSections(grouped);
         
         // Don't show featured/trending when searching
@@ -4161,9 +4409,9 @@ export default function SearchScreen() {
     }, 500);
 
     return () => clearTimeout(delay);
-  }, [query, selectedCategoryFilter, userUniversity]);
+  }, [query, selectedCategoryFilter, selectedSubCategoryFilter, userUniversity]);
 
-  const groupByCategory = (products: Product[]): CategorySection[] => {
+  const groupByCategory = (products: Product[], filterCategory: string | null): CategorySection[] => {
     const categoryOrder = [
       'Fashion',
       'Electronics',
@@ -4176,6 +4424,12 @@ export default function SearchScreen() {
       'Other',
     ];
 
+    // If no category filter is selected, show only "All Products" section with all products
+    if (!filterCategory) {
+      return products.length > 0 ? [{ title: 'All Products', data: products }] : [];
+    }
+
+    // If a category is selected, group products by that category
     const grouped = products.reduce((acc, product) => {
       const cat = product.category || 'Other';
       if (!acc[cat]) acc[cat] = [];
@@ -4626,50 +4880,88 @@ export default function SearchScreen() {
     );
   };
 
-  const renderCategorySection = ({ item }: { item: CategorySection }) => (
-    <View style={styles.categorySection}>
-      <View style={[styles.sectionHeader, { backgroundColor: sectionBackground }]}>
-        <Text style={[styles.sectionTitle, { color: textColor }]}>{item.title}</Text>
-        {item.data.length > numColumns && (
-          <TouchableOpacity
-            onPress={() => {
-              setSelectedCategory(item);
-              setCategoryModalVisible(true);
-            }}
-            style={styles.seeAllButton}
-          >
-            <Text style={[styles.seeAllText, { color: PRIMARY_COLOR }]}>See all ({item.data.length})</Text>
-            <Ionicons name="chevron-forward" size={16} color={PRIMARY_COLOR} />
-          </TouchableOpacity>
-        )}
-      </View>
+  const renderCategorySection = ({ item }: { item: CategorySection }) => {
+    // For Featured Products and Trending Now, render as horizontal scrollable list with "See all"
+    if (item.title === 'Featured Products' || item.title === 'Trending Now') {
+      return (
+        <View style={styles.categorySection}>
+          <View style={[styles.sectionHeader, { backgroundColor: sectionBackground }]}>
+            <Text style={[styles.sectionTitle, { color: textColor }]}>{item.title}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setSelectedCategory(item);
+                setCategoryModalVisible(true);
+              }}
+              style={styles.seeAllButton}
+            >
+              <Text style={[styles.seeAllText, { color: PRIMARY_COLOR }]}>See all ({item.data.length})</Text>
+              <Ionicons name="chevron-forward" size={16} color={PRIMARY_COLOR} />
+            </TouchableOpacity>
+          </View>
 
-      <FlatList
-        data={item.data}
-        renderItem={renderProduct}
-        keyExtractor={(product) => product.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.horizontalList}
-        ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
-      />
-    </View>
-  );
+          <FlatList
+            data={item.data}
+            renderItem={renderProduct}
+            keyExtractor={(product) => product.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalList}
+            ItemSeparatorComponent={() => <View style={{ width: GAP }} />}
+          />
+        </View>
+      );
+    }
+
+    // For Home and category sections, render all products as vertical grid
+    return (
+      <View style={styles.categorySection}>
+        <View style={[styles.sectionHeader, { backgroundColor: sectionBackground }]}>
+          <Text style={[styles.sectionTitle, { color: textColor }]}>{item.title}</Text>
+          <Text style={[styles.productCount, { color: isDark ? '#aaa' : '#666' }]}>
+            {item.data.length} {item.data.length === 1 ? 'product' : 'products'}
+          </Text>
+        </View>
+
+        <View style={styles.gridContainer}>
+          {item.data.map((product, index) => {
+            const isLastInRow = (index + 1) % numColumns === 0;
+            const isInLastRow = index >= item.data.length - (item.data.length % numColumns || numColumns);
+            
+            return (
+              <View 
+                key={product.id} 
+                style={[
+                  styles.gridItem,
+                  { 
+                    width: ITEM_WIDTH,
+                    marginRight: isLastInRow ? 0 : GAP,
+                    marginBottom: isInLastRow ? 0 : GAP,
+                  }
+                ]}
+              >
+                {renderProduct({ item: product })}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
 
   // Create all sections including featured and trending only when not searching
   const allSections = React.useMemo(() => {
     const sectionsArray: CategorySection[] = [];
     
-    // Add Featured Products section if we have featured products and not searching
-    if (featuredProducts.length > 0 && !query && !searchParams.productName && !searchParams.category && !searchParams.shopName) {
+    // Add Featured Products section if we have featured products and not searching and no category filter
+    if (featuredProducts.length > 0 && !query && !searchParams.productName && !searchParams.category && !searchParams.shopName && !selectedCategoryFilter) {
       sectionsArray.push({
         title: 'Featured Products',
         data: featuredProducts
       });
     }
     
-    // Add Trending Now section if we have trending products and not searching
-    if (trendingProducts.length > 0 && !query && !searchParams.productName && !searchParams.category && !searchParams.shopName) {
+    // Add Trending Now section if we have trending products and not searching and no category filter
+    if (trendingProducts.length > 0 && !query && !searchParams.productName && !searchParams.category && !searchParams.shopName && !selectedCategoryFilter) {
       sectionsArray.push({
         title: 'Trending Now',
         data: trendingProducts
@@ -4678,7 +4970,7 @@ export default function SearchScreen() {
     
     // Add all other category sections
     return [...sectionsArray, ...sections];
-  }, [featuredProducts, trendingProducts, sections, query, searchParams]);
+  }, [featuredProducts, trendingProducts, sections, query, searchParams, selectedCategoryFilter]);
 
   // Check if we're currently searching
   const isSearching = query || searchParams.productName || searchParams.category || searchParams.shopName;
@@ -4703,34 +4995,40 @@ export default function SearchScreen() {
           backgroundColor,
           borderBottomColor: borderColor 
         }]}>
-          <View style={styles.headerLeft}>
-            <Image 
-              source={{ uri: 'https://image2url.com/images/1764506443183-2ff76663-c119-4f05-93b4-d08e42895442.png' }} 
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-          
-          {/* App Name in Center - Professional Styling */}
-          <View style={styles.headerCenter}>
-            <Text style={[styles.appName, { 
-              color: textColor,
-              fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif',
-              fontWeight: '800',
-              letterSpacing: 0.5,
-              fontSize: 24,
-              textShadowColor: PRIMARY_COLOR,
-              textShadowOffset: { width: 0, height: 0 },
-              textShadowRadius: 10,
-            }]}>Suyado Mart</Text>
-            <Text style={[styles.appTagline, { 
-              color: PRIMARY_COLOR,
-              fontSize: 6,
-              letterSpacing: 1,
-              fontWeight: '600',
-              marginTop: 1,
-            }]}>PREMIUM SHOPPING EXPERIENCE</Text>
-          </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 10 }}
+            onPress={handleHeaderPress}
+          >
+            <View style={styles.headerLeft}>
+              <Image 
+                source={{ uri: 'https://image2url.com/images/1764506443183-2ff76663-c119-4f05-93b4-d08e42895442.png' }} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </View>
+            
+            {/* App Name in Center - Professional Styling */}
+            <View style={styles.headerCenter}>
+              <Text style={[styles.appName, { 
+                color: textColor,
+                fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif',
+                fontWeight: '800',
+                letterSpacing: 0.5,
+                fontSize: 24,
+                textShadowColor: PRIMARY_COLOR,
+                textShadowOffset: { width: 0, height: 0 },
+                textShadowRadius: 10,
+              }]}>Suyado Mart</Text>
+              <Text style={[styles.appTagline, { 
+                color: PRIMARY_COLOR,
+                fontSize: 6,
+                letterSpacing: 1,
+                fontWeight: '600',
+                marginTop: 1,
+              }]}>PREMIUM SHOPPING EXPERIENCE</Text>
+            </View>
+          </TouchableOpacity>
           
           <View style={styles.headerRight}>
             <TouchableOpacity 
@@ -4754,7 +5052,8 @@ export default function SearchScreen() {
       {/* Search Bar with Category Menu Button */}
       <View style={[styles.searchContainer, { 
         backgroundColor,
-        borderColor 
+        borderColor,
+        marginHorizontal: width > 600 ? 20 : 12
       }]}>
         <TouchableOpacity 
           style={[styles.categoryMenuButton, { borderRightColor: borderColor }]}
@@ -4933,7 +5232,9 @@ export default function SearchScreen() {
         onClose={() => setCategoriesDrawerVisible(false)}
         categories={allCategories}
         onSelectCategory={setSelectedCategoryFilter}
+        onSelectSubCategory={setSelectedSubCategoryFilter}
         selectedCategory={selectedCategoryFilter}
+        selectedSubCategory={selectedSubCategoryFilter}
         showAlert={showAlert}
       />
 
@@ -5078,23 +5379,24 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   headerLeft: {
-    flex: 1,
+    width: 56,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   headerCenter: {
-    flex: 2,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerRight: {
-    flex: 1,
+    width: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
   logoImage: {
-    marginLeft: -50,
-    width: 130,
-    height: 45,
+    width: 46,
+    height: 40,
   },
   appName: {
     fontSize: 20,
@@ -5186,7 +5488,6 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
     marginTop: 6,
     marginBottom: 1,
     borderRadius: 12,
@@ -5490,6 +5791,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
   },
+  productCount: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -5498,6 +5803,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginRight: 4,
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  gridItem: {
+    // Wrapper for each grid item to handle spacing
   },
   horizontalList: {
     paddingHorizontal: 16,
