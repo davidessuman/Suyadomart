@@ -238,12 +238,12 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
       const { data: userData } = await supabase.auth.getUser();
       const userProfile = await supabase
         .from('user_profiles')
-        .select('display_name, avatar_url')
+        .select('username, avatar_url')
         .eq('id', currentUserId)
         .single();
 
       const displayName =
-        userProfile.data?.display_name ||
+        userProfile.data?.username ||
         userData?.user?.email?.split('@')[0] ||
         'Anonymous';
       const avatarUrl = userProfile.data?.avatar_url || null;
