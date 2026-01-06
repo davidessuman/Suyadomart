@@ -120,7 +120,7 @@ interface SearchSuggestion {
   id: string;
   title: string;
   organizer: string;
-  type: 'title' | 'organizer';
+  type: 'title' | 'organizer' | 'announcementTitle' | 'announcedFor';
 }
 
 const getTodayUTC = () => new Date().toISOString().split('T')[0];
@@ -1232,28 +1232,36 @@ const SearchBar = ({
             nestedScrollEnabled={true}
             showsVerticalScrollIndicator={false}
           >
-            {suggestions.map((suggestion) => (
-              <TouchableOpacity
-                key={`${suggestion.id}-${suggestion.type}`}
-                style={styles.suggestionItem}
-                onPress={() => handleSelectSuggestion(suggestion)}
-              >
-                <View style={styles.suggestionIconContainer}>
-                  <Text style={styles.suggestionIcon}>
-                    {suggestion.type === 'title' ? '📅' : '👥'}
-                  </Text>
-                </View>
-                <View style={styles.suggestionContent}>
-                  <Text style={styles.suggestionTitle} numberOfLines={1}>
-                    {suggestion.title}
-                  </Text>
-                  <Text style={styles.suggestionSubtitle} numberOfLines={1}>
-                    {suggestion.type === 'title' ? 'Event' : 'Organizer'} • {suggestion.organizer}
-                  </Text>
-                </View>
-                <Text style={styles.suggestionArrow}>→</Text>
-              </TouchableOpacity>
-            ))}
+            {suggestions.map((suggestion) => {
+              const icon = suggestion.type === 'title' ? '📅' 
+                : suggestion.type === 'organizer' ? '👥' 
+                : suggestion.type === 'announcementTitle' ? '📢' 
+                : '🎯';
+              const subtitleLabel = suggestion.type === 'title' ? 'Event' 
+                : suggestion.type === 'organizer' ? 'Organizer' 
+                : suggestion.type === 'announcementTitle' ? 'Announcement' 
+                : 'Audience';
+              return (
+                <TouchableOpacity
+                  key={`${suggestion.id}-${suggestion.type}`}
+                  style={styles.suggestionItem}
+                  onPress={() => handleSelectSuggestion(suggestion)}
+                >
+                  <View style={styles.suggestionIconContainer}>
+                    <Text style={styles.suggestionIcon}>{icon}</Text>
+                  </View>
+                  <View style={styles.suggestionContent}>
+                    <Text style={styles.suggestionTitle} numberOfLines={1}>
+                      {suggestion.title}
+                    </Text>
+                    <Text style={styles.suggestionSubtitle} numberOfLines={1}>
+                      {subtitleLabel} • {suggestion.organizer}
+                    </Text>
+                  </View>
+                  <Text style={styles.suggestionArrow}>→</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
           <View style={styles.suggestionsFooter}>
             <Text style={styles.suggestionsFooterText}>
@@ -1573,6 +1581,7 @@ export default function EventsScreen() {
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
 
+
   // Alert state
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
@@ -1584,7 +1593,10 @@ export default function EventsScreen() {
 
   const [events, setEvents] = useState<EventItem[]>([]);
   const [userUniversity, setUserUniversity] = useState<string>('');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [feedView, setFeedView] = useState<'events' | 'announcements'>('events');
+  const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -1602,12 +1614,27 @@ export default function EventsScreen() {
   const [activeCategory, setActiveCategory] = useState<EventCategory | 'All'>('All');
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showUserEvents, setShowUserEvents] = useState(false);
+  const [showUserAnnouncements, setShowUserAnnouncements] = useState(false);
   const [showEventDetails, setShowEventDetails] = useState(false);
+  const [showAnnouncementDetails, setShowAnnouncementDetails] = useState(false);
+  const [viewingAnnouncementFromMyList, setViewingAnnouncementFromMyList] = useState(false);
+  const [showFullScreenImage, setShowFullScreenImage] = useState(false);
+  const [fullScreenImageUrl, setFullScreenImageUrl] = useState<string>('');
   const [isViewingOwnEvent, setIsViewingOwnEvent] = useState(false);
   const [userEvents, setUserEvents] = useState<EventItem[]>([]);
+  const [userAnnouncements, setUserAnnouncements] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isEditingEvent, setIsEditingEvent] = useState(false);
+  const [isAnnouncementModalVisible, setIsAnnouncementModalVisible] = useState(false);
+  const [showAnnouncementDatePicker, setShowAnnouncementDatePicker] = useState(false);
+  const [showAnnouncementCalendar, setShowAnnouncementCalendar] = useState(false);
+  const [selectedAnnouncementDates, setSelectedAnnouncementDates] = useState<string[]>([getTodayUTC()]);
+  const [announcementDayDetails, setAnnouncementDayDetails] = useState<Record<string, { time: string }>>({});
+  const [showAnnouncementDayEditor, setShowAnnouncementDayEditor] = useState(false);
+  const [editingAnnouncementDayIndex, setEditingAnnouncementDayIndex] = useState(0);
+  const [editingAnnouncementDayDate, setEditingAnnouncementDayDate] = useState('');
   const [showFlyerFullView, setShowFlyerFullView] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -1633,6 +1660,18 @@ export default function EventsScreen() {
     flyer: '',
   });
 
+  const [announcementData, setAnnouncementData] = useState({
+    title: '',
+    announcedFor: '',
+    message: '',
+    category: 'General' as EventCategory,
+    priority: 'Not Urgent' as 'Not Urgent' | 'Urgent',
+    image: '',
+    hasDateTime: false,
+    fromTime: '12:00 PM',
+    toTime: '01:00 PM',
+  });
+
   // Custom alert function using modal
   const showAlert = (title: string, message: string, buttons?: AlertButton[]) => {
     setAlertState({
@@ -1647,7 +1686,7 @@ export default function EventsScreen() {
     setAlertState(prev => ({ ...prev, visible: false }));
   };
 
-  // Generate search suggestions based on events
+  // Generate search suggestions based on events and announcements
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setSearchSuggestions([]);
@@ -1657,10 +1696,12 @@ export default function EventsScreen() {
     const query = searchQuery.toLowerCase().trim();
     const uniqueTitles = new Set<string>();
     const uniqueOrganizers = new Set<string>();
+    const uniqueAnnouncementTitles = new Set<string>();
+    const uniqueAnnouncedFor = new Set<string>();
     
     const suggestions: SearchSuggestion[] = [];
 
-    // Search in titles
+    // Event titles
     events.forEach(event => {
       if (event.title.toLowerCase().includes(query) && !uniqueTitles.has(event.title)) {
         uniqueTitles.add(event.title);
@@ -1673,7 +1714,7 @@ export default function EventsScreen() {
       }
     });
 
-    // Search in organizers
+    // Event organizers
     events.forEach(event => {
       if (event.organizer.toLowerCase().includes(query) && !uniqueOrganizers.has(event.organizer)) {
         uniqueOrganizers.add(event.organizer);
@@ -1686,9 +1727,37 @@ export default function EventsScreen() {
       }
     });
 
+    // Announcement titles
+    allAnnouncements.forEach(a => {
+      const title = (a.title || '').toLowerCase();
+      if (title.includes(query) && !uniqueAnnouncementTitles.has(a.title)) {
+        uniqueAnnouncementTitles.add(a.title);
+        suggestions.push({
+          id: a.id,
+          title: a.title,
+          organizer: a.announced_for || 'Announcement',
+          type: 'announcementTitle'
+        });
+      }
+    });
+
+    // Announcement audience (announced_for)
+    allAnnouncements.forEach(a => {
+      const audience = (a.announced_for || '').toLowerCase();
+      if (audience.includes(query) && !uniqueAnnouncedFor.has(a.announced_for)) {
+        uniqueAnnouncedFor.add(a.announced_for);
+        suggestions.push({
+          id: a.id,
+          title: a.announced_for || 'Audience',
+          organizer: a.title || 'Announcement',
+          type: 'announcedFor'
+        });
+      }
+    });
+
     // Limit to 10 suggestions
     setSearchSuggestions(suggestions.slice(0, 10));
-  }, [searchQuery, events]);
+  }, [searchQuery, events, allAnnouncements]);
 
   // Handle search when query changes
   useEffect(() => {
@@ -1710,7 +1779,7 @@ export default function EventsScreen() {
   }, [searchQuery, events]);
 
   // Upload image to Supabase Storage
-  const uploadImageToSupabase = async (imageUri: string): Promise<string | null> => {
+  const uploadImageToSupabase = async (imageUri: string, bucket: string = 'event-flyers'): Promise<string | null> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -1718,35 +1787,71 @@ export default function EventsScreen() {
         return null;
       }
 
-      // Generate unique filename
+      console.log('Starting image upload:', { imageUri, bucket, userId: user.id });
+
+      // Generate unique filename - simple UUID for all files
       const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${uuidv4()}.${fileExt}`;
       
-      // Convert image to blob
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      
+      console.log('Generated filename:', fileName);
+
+      // Convert image to blob - handle both file:// and https:// URIs
+      let blob;
+      try {
+        const response = await fetch(imageUri);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        blob = await response.blob();
+        console.log('Blob created, size:', blob.size);
+      } catch (fetchError) {
+        console.error('Fetch error:', fetchError);
+        showAlert('Error', 'Failed to read image file');
+        return null;
+      }
+
+      if (!blob || blob.size === 0) {
+        console.error('Blob is empty or invalid');
+        showAlert('Error', 'Image file is empty');
+        return null;
+      }
+
       // Upload to Supabase Storage
-      const { error } = await supabase.storage
-        .from('event-flyers')
+      console.log('Uploading to bucket:', bucket);
+      const { error, data } = await supabase.storage
+        .from(bucket)
         .upload(fileName, blob, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: `image/${fileExt}`
         });
 
       if (error) {
-        console.error('Upload error:', error);
-        throw error;
+        console.error('Supabase upload error:', error);
+        showAlert('Upload Error', `Failed to upload: ${error.message}`);
+        return null;
       }
 
+      console.log('Upload successful, getting public URL');
+
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('event-flyers')
+      const { data: urlData } = supabase.storage
+        .from(bucket)
         .getPublicUrl(fileName);
 
+      const publicUrl = urlData?.publicUrl;
+      
+      if (!publicUrl) {
+        console.error('Failed to get public URL from response:', urlData);
+        showAlert('Error', 'Failed to generate image URL');
+        return null;
+      }
+
+      console.log('Image uploaded successfully:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error('Unexpected error uploading image:', error);
+      showAlert('Error', `Unexpected error: ${error}`);
       return null;
     }
   };
@@ -1779,6 +1884,7 @@ export default function EventsScreen() {
   useEffect(() => {
     if (userUniversity) {
       fetchEvents();
+      fetchAllAnnouncements();
     }
   }, [userUniversity]);
 
@@ -1791,6 +1897,7 @@ export default function EventsScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        setCurrentUserId(user.id);
         const { data, error } = await supabase
           .from('user_profiles')
           .select('university')
@@ -1895,6 +2002,156 @@ export default function EventsScreen() {
     }
   };
 
+  const fetchUserAnnouncements = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUserAnnouncements(data || []);
+      if (!data || data.length === 0) {
+        showAlert('No Announcements', 'You haven\'t posted any announcements yet');
+      }
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+      showAlert('Error', 'Failed to fetch your announcements');
+    }
+  };
+
+  const fetchAllAnnouncements = async () => {
+    if (!userUniversity) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('university', userUniversity)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAllAnnouncements(data || []);
+    } catch (error) {
+      console.error('Error fetching all announcements:', error);
+    }
+  };
+
+  const deleteAnnouncement = async (announcementId: string) => {
+    try {
+      const { error } = await supabase
+        .from('announcements')
+        .delete()
+        .eq('id', announcementId);
+
+      if (error) throw error;
+
+      setUserAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+      showAlert('Success', 'Announcement deleted successfully');
+    } catch (error) {
+      console.error('Error deleting announcement:', error);
+      showAlert('Error', 'Failed to delete announcement');
+    }
+  };
+
+  const editAnnouncement = (announcement: any) => {
+    setSelectedAnnouncement(announcement);
+    setAnnouncementData({
+      title: announcement.title,
+      announcedFor: announcement.announced_for,
+      message: announcement.message,
+      category: announcement.category as EventCategory,
+      priority: announcement.priority as 'Not Urgent' | 'Urgent',
+      image: announcement.image_url || '',
+      hasDateTime: announcement.has_date_time,
+      fromTime: announcement.from_time || '12:00 PM',
+      toTime: announcement.to_time || '01:00 PM',
+    });
+    const dates = announcement.announcement_dates ? JSON.parse(announcement.announcement_dates) : [getTodayUTC()];
+    setSelectedAnnouncementDates(dates);
+    const dayTimes = announcement.per_day_times ? JSON.parse(announcement.per_day_times) : {};
+    setAnnouncementDayDetails(dayTimes);
+    setShowUserAnnouncements(false);
+    setIsAnnouncementModalVisible(true);
+  };
+
+  const saveEditedAnnouncement = async () => {
+    if (!selectedAnnouncement) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showAlert('Error', 'You must be logged in to edit announcements');
+        return;
+      }
+
+      let imageUrl: string = announcementData.image;
+      if (announcementData.image && !announcementData.image.startsWith('https://')) {
+        console.log('Image to upload:', announcementData.image);
+        const uploadedUrl = await uploadImageToSupabase(announcementData.image, 'announcements');
+        console.log('Upload result:', uploadedUrl);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        } else {
+          console.warn('Image upload failed, continuing with existing image');
+          imageUrl = announcementData.image;
+        }
+      }
+
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: announcementData.title,
+          announced_for: announcementData.announcedFor,
+          message: announcementData.message,
+          category: announcementData.category,
+          priority: announcementData.priority,
+          image_url: imageUrl,
+          has_date_time: announcementData.hasDateTime,
+          announcement_dates: announcementData.hasDateTime ? JSON.stringify(selectedAnnouncementDates) : null,
+          from_time: announcementData.hasDateTime ? announcementData.fromTime : null,
+          to_time: announcementData.hasDateTime ? announcementData.toTime : null,
+          per_day_times: selectedAnnouncementDates.length > 1 && announcementData.hasDateTime ? JSON.stringify(announcementDayDetails) : null,
+        })
+        .eq('id', selectedAnnouncement.id);
+
+      if (error) throw error;
+
+      setIsAnnouncementModalVisible(false);
+      setSelectedAnnouncement(null);
+      setShowAnnouncementCalendar(false);
+      setSelectedAnnouncementDates([getTodayUTC()]);
+      setAnnouncementDayDetails({});
+      setAnnouncementData({
+        title: '',
+        announcedFor: '',
+        message: '',
+        category: 'General',
+        priority: 'Not Urgent',
+        image: '',
+        hasDateTime: false,
+        fromTime: '12:00 PM',
+        toTime: '01:00 PM',
+      });
+      fetchUserAnnouncements();
+      showAlert('Success', 'Announcement updated successfully!');
+    } catch (error) {
+      console.error('Error updating announcement:', error);
+      showAlert('Error', 'Failed to update announcement');
+    }
+  };
+
+  const showDeleteConfirmation = (announcementId: string) => {
+    showAlert('Delete Announcement', 'Are you sure you want to delete this announcement?', [
+      { text: 'Cancel', onPress: () => {} },
+      { text: 'Delete', onPress: () => deleteAnnouncement(announcementId), style: 'destructive' }
+    ]);
+  };
+
   const handleDeleteEvent = async (eventId: string) => {
     try {
       // Get the event first to check if it has a flyer
@@ -1979,34 +2236,28 @@ export default function EventsScreen() {
 
   const pickFlyer = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        showAlert('Permission Required', 'Please allow access to your photo library to select a flyer.');
-        return;
-      }
-      
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 0.8,
         aspect: [4, 3],
+        quality: 0.8,
       });
       
-      if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
-        
-        // Show loading state
-        showAlert('Uploading', 'Uploading flyer image...');
-        
-        // Upload to Supabase Storage
-        const flyerUrl = await uploadImageToSupabase(imageUri);
-        
-        if (flyerUrl) {
-          setFormData({ ...formData, flyer: flyerUrl });
-          showAlert('Success', 'Flyer uploaded successfully!');
-        } else {
-          showAlert('Error', 'Failed to upload flyer. Please try again.');
-        }
+      if (result.canceled || !result.assets?.[0]) return;
+      
+      const imageUri = result.assets[0].uri;
+      
+      // Show loading state
+      showAlert('Uploading', 'Uploading flyer image...');
+      
+      // Upload to Supabase Storage
+      const flyerUrl = await uploadImageToSupabase(imageUri);
+      
+      if (flyerUrl) {
+        setFormData({ ...formData, flyer: flyerUrl });
+        showAlert('Success', 'Flyer uploaded successfully!');
+      } else {
+        showAlert('Error', 'Failed to upload flyer. Please try again.');
       }
     } catch (error) {
       console.error('Error picking/uploading flyer:', error);
@@ -2016,30 +2267,75 @@ export default function EventsScreen() {
 
   const todayEvents = useMemo(() => events.filter(e => e.date === getTodayUTC()), [events]);
 
+  // Get announcements that should show on banner
+  const bannerAnnouncements = useMemo(() => {
+    if (!allAnnouncements.length) return [];
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return allAnnouncements.filter(announcement => {
+      try {
+        const postedDate = new Date(announcement.created_at);
+        postedDate.setHours(0, 0, 0, 0);
+
+        const hasDates = announcement.has_date_time && announcement.announcement_dates;
+        const dates = hasDates ? JSON.parse(announcement.announcement_dates) : [];
+
+        // Determine announcement date if provided
+        const announcementDate = hasDates && Array.isArray(dates) && dates.length > 0
+          ? new Date(dates[0])
+          : null;
+
+        if (announcementDate) {
+          announcementDate.setHours(0, 0, 0, 0);
+
+          // Window: max(posted date, 7 days before announcement) -> announcement date (inclusive)
+          const sevenDaysBefore = new Date(announcementDate);
+          sevenDaysBefore.setDate(announcementDate.getDate() - 7);
+
+          const windowStart = postedDate > sevenDaysBefore ? postedDate : sevenDaysBefore;
+          return today >= windowStart && today <= announcementDate;
+        }
+
+        // Fallback: no date provided. Show for 7 days from posted date (inclusive)
+        const windowEnd = new Date(postedDate);
+        windowEnd.setDate(windowEnd.getDate() + 6);
+        return today >= postedDate && today <= windowEnd;
+      } catch (error) {
+        console.error('Error parsing announcement dates:', error);
+        return false;
+      }
+    });
+  }, [allAnnouncements]);
+
+  // Combined banner items (events happening today + banner-eligible announcements)
+  const bannerItems = useMemo(() => {
+    const items: { type: 'event' | 'announcement'; data: any }[] = [];
+
+    todayEvents.forEach(event => items.push({ type: 'event', data: event }));
+    bannerAnnouncements.forEach(announcement => items.push({ type: 'announcement', data: announcement }));
+
+    return items;
+  }, [todayEvents, bannerAnnouncements]);
+
   useEffect(() => {
-    // Only set up banner rotation if there are todayEvents
-    if (todayEvents.length > 0) {
-      // Ensure bannerIndex is valid
-      if (bannerIndex >= todayEvents.length) {
+    const items = bannerItems;
+
+    if (items.length > 0) {
+      if (bannerIndex >= items.length) {
         setBannerIndex(0);
       }
-      
+
       const interval = setInterval(() => {
-        setBannerIndex((prev) => {
-          // If component refreshed and todayEvents changed, reset to 0
-          if (prev >= todayEvents.length - 1) {
-            return 0;
-          }
-          return prev + 1;
-        });
+        setBannerIndex((prev) => (prev >= items.length - 1 ? 0 : prev + 1));
       }, 4000);
-      
+
       return () => clearInterval(interval);
-    } else {
-      // No events today, reset banner index
-      setBannerIndex(0);
     }
-  }, [todayEvents, bannerIndex]);
+
+    setBannerIndex(0);
+  }, [bannerItems, bannerIndex]);
 
   // Apply filter to events
   const filterEventsByDate = (eventsToFilter: EventItem[]): EventItem[] => {
@@ -2133,18 +2429,44 @@ export default function EventsScreen() {
     return result;
   }, [activeCategory, events, isSearchActive, searchedEvents, activeFilter, filterSelectedDays, filterTimeRange]);
 
+  const filteredAnnouncements = useMemo(() => {
+    let result = allAnnouncements;
+    
+    // Apply category filter (using same categories as events)
+    if (activeCategory !== 'All') {
+      result = result.filter(announcement => announcement.category === activeCategory);
+    }
+    
+    // Apply search if active
+    if (isSearchActive && searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(announcement => {
+        const title = (announcement.title || '').toLowerCase();
+        const announcedFor = (announcement.announced_for || '').toLowerCase();
+        const message = (announcement.message || '').toLowerCase();
+        return title.includes(q) || announcedFor.includes(q) || message.includes(q);
+      });
+    }
+    
+    return result;
+  }, [activeCategory, allAnnouncements, isSearchActive, searchQuery]);
+
   // Handle suggestion selection
   const handleSelectSuggestion = (suggestion: SearchSuggestion) => {
-    setSearchQuery(suggestion.type === 'title' ? suggestion.title : suggestion.organizer);
+    if (suggestion.type === 'title') {
+      setSearchQuery(suggestion.title);
+      setSearchedEvents(events.filter(event => event.title === suggestion.title));
+    } else if (suggestion.type === 'organizer') {
+      setSearchQuery(suggestion.organizer);
+      setSearchedEvents(events.filter(event => event.organizer === suggestion.organizer));
+    } else if (suggestion.type === 'announcementTitle') {
+      setSearchQuery(suggestion.title);
+      setSearchedEvents([]);
+    } else {
+      setSearchQuery(suggestion.title);
+      setSearchedEvents([]);
+    }
     setIsSearchActive(true);
-    
-    const filtered = events.filter(event => 
-      suggestion.type === 'title' 
-        ? event.title === suggestion.title
-        : event.organizer === suggestion.organizer
-    );
-    
-    setSearchedEvents(filtered);
   };
 
   // Clear search
@@ -2377,6 +2699,7 @@ export default function EventsScreen() {
 
         setUserEvents(prev => prev.map(e => e.id === selectedEvent.id ? updatedEvent : e));
         setEvents(prev => prev.map(e => e.id === selectedEvent.id ? updatedEvent : e));
+        setSelectedEvent(updatedEvent);
 
         setIsModalVisible(false);
         setIsEditingEvent(false);
@@ -2666,6 +2989,93 @@ export default function EventsScreen() {
     );
   };
 
+  const renderAnnouncement = ({ item }: { item: any }) => {
+    const announcementDates = item.announcement_dates ? JSON.parse(item.announcement_dates) : [];
+    const hasDateTime = item.has_date_time;
+    
+    // Helper function for category colors
+    const getCategoryColor = (category: string) => {
+      const colorMap: Record<string, string> = {
+        'Academic': colors.primary,
+        'Social': '#FF6B6B',
+        'Sports': '#4ECDC4',
+        'Culture': '#FFD93D',
+        'Career': '#A8E6CF',
+        'General': colors.textSecondary,
+      };
+      return colorMap[category] || colors.primary;
+    };
+
+    // Helper function for priority colors
+    const getPriorityColor = (priority: string) => {
+      const colorMap: Record<string, string> = {
+        'Urgent': '#FF4444',
+        'Not Urgent': '#888888',
+      };
+      return colorMap[priority] || colors.textSecondary;
+    };
+    
+    return (
+      <TouchableOpacity
+        style={[styles.announcementCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        onPress={() => {
+          setSelectedAnnouncement(item);
+          setShowAnnouncementDetails(true);
+        }}
+      >
+        {/* Image Section */}
+        {item.image_url && item.image_url.startsWith('https://') && (
+          <TouchableOpacity 
+            style={styles.announcementImageContainer}
+            onPress={(e) => {
+              e.stopPropagation();
+              setFullScreenImageUrl(item.image_url);
+              setShowFullScreenImage(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Image 
+              source={{ uri: item.image_url }} 
+              style={styles.announcementImageStyle} 
+              resizeMode="cover" 
+            />
+          </TouchableOpacity>
+        )}
+        
+        {/* Content Section */}
+        <View style={[styles.announcementCardContent, { flex: 1 }]}>
+          <Text style={[styles.announcementCardTitle, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
+          
+          {item.announced_for && (
+            <Text style={[styles.announcementCardSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              👥 {item.announced_for}
+            </Text>
+          )}
+          
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <View style={[styles.priorityBadge, { backgroundColor: getCategoryColor(item.category) }]}>
+              <Text style={[styles.priorityBadgeText, { color: '#FFFFFF' }]}>{item.category}</Text>
+            </View>
+            {item.priority && (
+              <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
+                <Text style={[styles.priorityBadgeText, { color: '#FFFFFF' }]}>{item.priority}</Text>
+              </View>
+            )}
+          </View>
+          
+          {hasDateTime && announcementDates.length > 0 && (
+            <Text style={[styles.announcementCardDate, { color: colors.textSecondary, marginTop: 8 }]} numberOfLines={1}>
+              📅 {announcementDates.length === 1 
+                ? formatShortDate(announcementDates[0])
+                : `${formatShortDate(announcementDates[0])} - ${formatShortDate(announcementDates[announcementDates.length - 1])}`
+              }
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderUserEvent = ({ item }: { item: EventItem }) => (
     <View style={styles.userEventCard}>
       <TouchableOpacity 
@@ -2746,7 +3156,38 @@ export default function EventsScreen() {
       <View style={[styles.headerRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View>
           <Text style={[styles.welcomeText, { color: colors.textSecondary }]}>Featured Today</Text>
-          <Text style={[styles.header, { color: colors.text }]}>Events</Text>
+          
+          {/* Toggle Buttons */}
+          <View style={styles.feedToggleContainer}>
+            <TouchableOpacity 
+              style={[
+                styles.feedToggleButton, 
+                feedView === 'events' && styles.feedToggleButtonActive,
+                { backgroundColor: feedView === 'events' ? colors.primary : colors.card, borderColor: colors.border }
+              ]}
+              onPress={() => setFeedView('events')}
+            >
+              <Text style={[
+                styles.feedToggleText,
+                { color: feedView === 'events' ? '#FFFFFF' : colors.text }
+              ]}>Events</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[
+                styles.feedToggleButton, 
+                feedView === 'announcements' && styles.feedToggleButtonActive,
+                { backgroundColor: feedView === 'announcements' ? colors.primary : colors.card, borderColor: colors.border }
+              ]}
+              onPress={() => setFeedView('announcements')}
+            >
+              <Text style={[
+                styles.feedToggleText,
+                { color: feedView === 'announcements' ? '#FFFFFF' : colors.text }
+              ]}>Announcements</Text>
+            </TouchableOpacity>
+          </View>
+          
           {userUniversity && (
             <Text style={[styles.universityText, { color: colors.primary }]}>📍 {userUniversity}</Text>
           )}
@@ -2799,7 +3240,7 @@ export default function EventsScreen() {
       {isSearchActive && searchQuery && (
         <View style={styles.searchResultsHeader}>
           <Text style={[styles.searchResultsText, { color: colors.text }]}>
-            Search results for "{searchQuery}" • {searchedEvents.length} event{searchedEvents.length !== 1 ? 's' : ''} found
+            Search results for "{searchQuery}" • {feedView === 'events' ? searchedEvents.length : filteredAnnouncements.length} {feedView === 'events' ? 'event' : 'announcement'}{(feedView === 'events' ? searchedEvents.length : filteredAnnouncements.length) !== 1 ? 's' : ''} found
           </Text>
           <TouchableOpacity onPress={handleClearSearch} style={styles.clearSearchResultsButton}>
             <Text style={[styles.clearSearchResultsText, { color: colors.primary }]}>Clear</Text>
@@ -2807,7 +3248,8 @@ export default function EventsScreen() {
         </View>
       )}
 
-      {todayEvents.length > 0 && bannerIndex < todayEvents.length && !isSearchActive ? (
+      {/* Banner - Show for events or announcements based on feedView, with fallback */}
+      {feedView === 'events' && todayEvents.length > 0 && bannerIndex < todayEvents.length && !isSearchActive ? (
         <TouchableOpacity 
           onPress={() => {
             if (todayEvents[bannerIndex]) {
@@ -2823,9 +3265,18 @@ export default function EventsScreen() {
               backgroundColor: colors.primary,
             }
           ]}>
+            {todayEvents[bannerIndex]?.flyer && todayEvents[bannerIndex].flyer.startsWith('https://') && (
+              <>
+                <Image source={{ uri: todayEvents[bannerIndex].flyer }} style={styles.adBgImage} blurRadius={14} />
+                <View style={styles.adBgOverlay} />
+              </>
+            )}
             <View style={styles.adContent}>
               <View style={styles.adTextSide}>
-                <View style={styles.liveTag}><Text style={styles.liveTagText}>HAPPENING NOW</Text></View>
+                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
+                  <View style={styles.liveTag}><Text style={styles.liveTagText}>📅 EVENT</Text></View>
+                  <View style={styles.liveTag}><Text style={styles.liveTagText}>HAPPENING NOW</Text></View>
+                </View>
                 <Text style={styles.adTitle} numberOfLines={2}>{todayEvents[bannerIndex]?.title || ''}</Text>
                 <Text style={styles.adLocation} numberOfLines={1}>
                   {todayEvents[bannerIndex]?.appearance === 'Virtual Meeting' 
@@ -2838,16 +3289,152 @@ export default function EventsScreen() {
                   <Text style={styles.adTime}>🕒 {todayEvents[bannerIndex].startTime} - {todayEvents[bannerIndex].endTime} ({calculateDuration(todayEvents[bannerIndex].startTime!, todayEvents[bannerIndex].endTime!)})</Text>
                 )}
               </View>
-              <View style={styles.adFlyerSide}>
-                {todayEvents[bannerIndex]?.flyer && todayEvents[bannerIndex].flyer.startsWith('https://') ? (
-                  <Image source={{ uri: todayEvents[bannerIndex].flyer }} style={styles.adFlyerImage} resizeMode="contain" />
-                ) : (
-                  <View style={styles.adPlaceholder}><Text style={styles.adPlaceholderText}>FLYER</Text></View>
-                )}
-              </View>
+                <View style={styles.adFlyerSide}>
+                  <View style={styles.adFlyerCard}>
+                    {todayEvents[bannerIndex]?.flyer && todayEvents[bannerIndex].flyer.startsWith('https://') ? (
+                      <Image source={{ uri: todayEvents[bannerIndex].flyer }} style={styles.adFlyerImage} resizeMode="contain" />
+                    ) : (
+                      <View style={styles.adPlaceholder}><Text style={styles.adPlaceholderText}>FLYER</Text></View>
+                    )}
+                  </View>
+                </View>
             </View>
           </View>
         </TouchableOpacity>
+      ) : !isSearchActive && bannerItems.length > 0 && bannerIndex < bannerItems.length ? (
+        (() => {
+          const current = bannerItems[bannerIndex];
+
+          if (current.type === 'event') {
+            const event = current.data;
+            return (
+              <TouchableOpacity 
+                onPress={() => {
+                  setSelectedEvent(event);
+                  setIsViewingOwnEvent(false);
+                  setShowEventDetails(true);
+                }}
+              >
+                <View style={[
+                  styles.adBanner, 
+                  { 
+                    backgroundColor: colors.primary,
+                  }
+                ]}>
+                  {event?.flyer && event.flyer.startsWith('https://') && (
+                    <>
+                      <Image source={{ uri: event.flyer }} style={styles.adBgImage} blurRadius={14} />
+                      <View style={styles.adBgOverlay} />
+                    </>
+                  )}
+                  <View style={styles.adContent}>
+                    <View style={styles.adTextSide}>
+                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
+                        <View style={styles.liveTag}><Text style={styles.liveTagText}>📅 EVENT</Text></View>
+                        <View style={styles.liveTag}><Text style={styles.liveTagText}>HAPPENING NOW</Text></View>
+                      </View>
+                      <Text style={styles.adTitle} numberOfLines={2}>{event?.title || ''}</Text>
+                      <Text style={styles.adLocation} numberOfLines={1}>
+                        {event?.appearance === 'Virtual Meeting' 
+                          ? event?.platform 
+                          : (event?.appearance === 'Both' 
+                              ? (event?.venue || event?.platform)
+                              : event?.venue)}
+                      </Text>
+                      {event?.startTime && event?.endTime && (
+                        <Text style={styles.adTime}>🕒 {event.startTime} - {event.endTime} ({calculateDuration(event.startTime!, event.endTime!)})</Text>
+                      )}
+                    </View>
+                    <View style={styles.adFlyerSide}>
+                      <View style={styles.adFlyerCard}>
+                        {event?.flyer && event.flyer.startsWith('https://') ? (
+                          <Image source={{ uri: event.flyer }} style={styles.adFlyerImage} resizeMode="contain" />
+                        ) : (
+                          <View style={styles.adPlaceholder}><Text style={styles.adPlaceholderText}>FLYER</Text></View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          }
+
+          const announcement = current.data;
+          return (
+            <TouchableOpacity 
+              onPress={() => {
+                setSelectedAnnouncement(announcement);
+                setShowAnnouncementDetails(true);
+              }}
+            >
+              <View style={[
+                styles.adBanner, 
+                { 
+                  backgroundColor: colors.info,
+                }
+              ]}>
+                {announcement?.image_url && announcement.image_url.startsWith('https://') && (
+                  <>
+                    <Image source={{ uri: announcement.image_url }} style={styles.adBgImage} blurRadius={14} />
+                    <View style={styles.adBgOverlay} />
+                  </>
+                )}
+                <View style={styles.adContent}>
+                  <View style={styles.adTextSide}>
+                    <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
+                      <View style={[styles.liveTag, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+                        <Text style={styles.liveTagText}>📢 ANNOUNCEMENT</Text>
+                      </View>
+                      <View style={[styles.liveTag, { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
+                        <Text style={styles.liveTagText}>
+                          {(() => {
+                            if (!announcement?.announcement_dates) return 'UPCOMING';
+                            try {
+                              const dates = JSON.parse(announcement.announcement_dates);
+                              const announcementDate = new Date(dates[0]);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              announcementDate.setHours(0, 0, 0, 0);
+                              const daysDiff = Math.floor((announcementDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                              
+                              if (daysDiff === 0) return 'TODAY';
+                              if (daysDiff === 1) return 'TOMORROW';
+                              return `IN ${daysDiff} DAYS`;
+                            } catch {
+                              return 'UPCOMING';
+                            }
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={[styles.liveTag, { backgroundColor: (announcement?.priority === 'Urgent' ? colors.error : colors.success) + '30' }]}>
+                        <Text style={[styles.liveTagText, { color: announcement?.priority === 'Urgent' ? colors.error : colors.success }]}>
+                          {announcement?.priority || 'Not Urgent'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.adTitle} numberOfLines={2}>{announcement?.title || ''}</Text>
+                    <Text style={styles.adLocation} numberOfLines={1}>
+                      👥 {announcement?.announced_for || 'All Students'}
+                    </Text>
+                    {announcement?.from_time && announcement?.to_time && (
+                      <Text style={styles.adTime}>🕒 {announcement.from_time} - {announcement.to_time}</Text>
+                    )}
+                  </View>
+                  <View style={styles.adFlyerSide}>
+                    <View style={styles.adFlyerCard}>
+                      {announcement?.image_url && announcement.image_url.startsWith('https://') ? (
+                        <Image source={{ uri: announcement.image_url }} style={styles.adFlyerImage} resizeMode="contain" />
+                      ) : (
+                        <View style={styles.adPlaceholder}><Text style={styles.adPlaceholderText}>📢</Text></View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })()
       ) : null}
 
       <View style={{ marginBottom: 15, zIndex: 1 }}>
@@ -2866,27 +3453,27 @@ export default function EventsScreen() {
         </ScrollView>
       </View>
 
-      {filteredEvents.length === 0 ? (
+      {(feedView === 'events' ? filteredEvents : filteredAnnouncements).length === 0 ? (
         <View style={styles.emptyContainer}>
           {isSearchActive ? (
             <>
-              <Text style={[styles.emptyText, { color: colors.text }]}>No events found for "{searchQuery}"</Text>
+              <Text style={[styles.emptyText, { color: colors.text }]}>No {feedView} found for "{searchQuery}"</Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try a different search term</Text>
             </>
           ) : (
             <>
-              <Text style={[styles.emptyText, { color: colors.text }]}>No events found for {activeFilter !== 'All' ? activeFilter : userUniversity}</Text>
+              <Text style={[styles.emptyText, { color: colors.text }]}>No {feedView} found for {activeFilter !== 'All' ? activeFilter : userUniversity}</Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                {activeFilter !== 'All' ? 'Try changing your filter settings' : 'Be the first to create an event!'}
+                {activeFilter !== 'All' ? 'Try changing your filter settings' : `Be the first to create ${feedView === 'events' ? 'an event' : 'an announcement'}!`}
               </Text>
             </>
           )}
         </View>
       ) : (
         <FlatList
-          data={filteredEvents}
+          data={feedView === 'events' ? filteredEvents : filteredAnnouncements}
           keyExtractor={item => item.id}
-          renderItem={renderEvent}
+          renderItem={feedView === 'events' ? renderEvent : renderAnnouncement}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
         />
       )}
@@ -2915,6 +3502,20 @@ export default function EventsScreen() {
               style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => {
                 setShowActionMenu(false);
+                setIsAnnouncementModalVisible(true);
+              }}
+            >
+              <Text style={styles.actionMenuButtonIcon}>📢</Text>
+              <View>
+                <Text style={[styles.actionMenuButtonTitle, { color: colors.text }]}>Announcement</Text>
+                <Text style={[styles.actionMenuButtonSubtitle, { color: colors.textSecondary }]}>Post an important announcement</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => {
+                setShowActionMenu(false);
                 fetchUserEvents();
                 setShowUserEvents(true);
               }}
@@ -2923,6 +3524,21 @@ export default function EventsScreen() {
               <View>
                 <Text style={[styles.actionMenuButtonTitle, { color: colors.text }]}>My Events</Text>
                 <Text style={[styles.actionMenuButtonSubtitle, { color: colors.textSecondary }]}>View your published events</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => {
+                setShowActionMenu(false);
+                fetchUserAnnouncements();
+                setShowUserAnnouncements(true);
+              }}
+            >
+              <Text style={styles.actionMenuButtonIcon}>📢</Text>
+              <View>
+                <Text style={[styles.actionMenuButtonTitle, { color: colors.text }]}>My Announcements</Text>
+                <Text style={[styles.actionMenuButtonSubtitle, { color: colors.textSecondary }]}>View and manage your announcements</Text>
               </View>
             </TouchableOpacity>
 
@@ -2966,6 +3582,122 @@ export default function EventsScreen() {
               keyExtractor={item => item.id}
               renderItem={renderUserEvent}
               contentContainerStyle={styles.userEventsList}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* USER ANNOUNCEMENTS MODAL */}
+      <Modal visible={showUserAnnouncements} animationType="slide" transparent>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>My Announcements</Text>
+            <TouchableOpacity onPress={() => setShowUserAnnouncements(false)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.closeBtnText, { color: colors.textSecondary }]}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {userAnnouncements.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: colors.text }]}>No announcements posted yet</Text>
+              <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Post your first announcement to get started</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={userAnnouncements}
+              keyExtractor={item => item.id}
+              renderItem={({ item: announcement }) => {
+                console.log('Rendering announcement:', announcement.id, 'Image URL:', announcement.image_url);
+                
+                // Helper function for category colors
+                const getCategoryColor = (category: string) => {
+                  const colorMap: Record<string, string> = {
+                    'Academic': colors.primary,
+                    'Social': '#FF6B6B',
+                    'Sports': '#4ECDC4',
+                    'Culture': '#FFD93D',
+                    'Career': '#A8E6CF',
+                    'General': colors.textSecondary,
+                    'Entertainment': '#FF6B6B',
+                    'Educational': colors.primary,
+                    'Political': '#FFD93D',
+                    'Religious': '#A8E6CF',
+                  };
+                  return colorMap[category] || colors.primary;
+                };
+                
+                return (
+                <TouchableOpacity 
+                  style={[styles.announcementCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => {
+                    setSelectedAnnouncement(announcement);
+                    setViewingAnnouncementFromMyList(true);
+                    setShowAnnouncementDetails(true);
+                  }}
+                >
+                  {/* Image Section */}
+                  {announcement.image_url && announcement.image_url.startsWith('https://') ? (
+                    <TouchableOpacity 
+                      style={styles.announcementImageContainer}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setFullScreenImageUrl(announcement.image_url);
+                        setShowFullScreenImage(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Image 
+                        source={{ uri: announcement.image_url }} 
+                        style={styles.announcementImageStyle}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.announcementImageContainer}>
+                      <View style={styles.announcementImagePlaceholder}>
+                        <Text style={styles.announcementImagePlaceholderText}>
+                          {announcement.image_url ? 'LOADING...' : 'NO IMAGE'}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Content Section */}
+                  <View style={styles.announcementCardContent}>
+                    <View style={styles.announcementCardHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.announcementCardTitle, { color: colors.text }]} numberOfLines={2}>
+                          {announcement.title}
+                        </Text>
+                        <Text style={[styles.announcementCardSubtitle, { color: colors.textSecondary }]}>
+                          For: {announcement.announced_for}
+                        </Text>
+                      </View>
+                      <View style={[styles.priorityBadge, 
+                        announcement.priority === 'Urgent' ? { backgroundColor: colors.error + '30' } : { backgroundColor: colors.info + '30' }
+                      ]}>
+                        <Text style={[styles.priorityBadgeText, 
+                          announcement.priority === 'Urgent' ? { color: colors.error } : { color: colors.info }
+                        ]}>
+                          {announcement.priority}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.announcementCardFooter}>
+                      <Text style={[styles.announcementCardDate, { color: colors.textTertiary }]}>
+                        📅 {new Date(announcement.created_at).toLocaleDateString()}
+                      </Text>
+                      <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(announcement.category) + '30' }]}>
+                        <Text style={[styles.categoryBadgeText, { color: getCategoryColor(announcement.category) }]}>
+                          {announcement.category}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+                );
+              }}
+              contentContainerStyle={styles.announcementsList}
             />
           )}
         </SafeAreaView>
@@ -3179,6 +3911,147 @@ export default function EventsScreen() {
                       }}
                     >
                       <Text style={styles.eventDetailsActionButtonText}>🗑️ Delete Event</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Spacing */}
+                <View style={{ height: 20 }} />
+              </View>
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* ANNOUNCEMENT DETAILS MODAL */}
+      <Modal visible={showAnnouncementDetails} animationType="slide" transparent>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+          {/* Header */}
+          <View style={[styles.eventDetailsHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => { setShowAnnouncementDetails(false); setViewingAnnouncementFromMyList(false); }} style={styles.eventDetailsBackBtn}>
+              <Text style={[styles.eventDetailsBackIcon, { color: colors.text }]}>‹</Text>
+            </TouchableOpacity>
+            <Text style={[styles.eventDetailsHeaderTitle, { color: colors.text }]}>Announcement Details</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          {selectedAnnouncement && (
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              {/* Professional Image Banner Section */}
+              {selectedAnnouncement.image_url && selectedAnnouncement.image_url.startsWith('https://') ? (
+                <TouchableOpacity 
+                  activeOpacity={0.8}
+                  style={styles.flyerBannerContainer}
+                  onPress={() => {
+                    setFullScreenImageUrl(selectedAnnouncement.image_url);
+                    setShowFullScreenImage(true);
+                  }}
+                >
+                  <View style={[styles.flyerBannerInner, { backgroundColor: colors.surface }]}>
+                    <Image 
+                      source={{ uri: selectedAnnouncement.image_url }} 
+                      style={styles.flyerBannerImage}
+                      resizeMode="contain"
+                    />
+                    <View style={styles.flyerBannerOverlay} />
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.flyerBannerPlaceholder, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={styles.flyerBannerPlaceholderIcon}>📢</Text>
+                  <Text style={[styles.flyerBannerPlaceholderText, { color: colors.textSecondary }]}>No Image Available</Text>
+                </View>
+              )}
+
+              {/* Main Content */}
+              <View style={styles.eventDetailsMainContent}>
+                {/* Title Section */}
+                <View style={styles.eventDetailsTitleSection}>
+                  <Text style={[styles.eventDetailsMainTitle, { color: colors.text }]}>{selectedAnnouncement.title}</Text>
+                  <View style={styles.eventDetailsBadgesRow}>
+                    <View style={[styles.eventDetailsBadge, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.eventDetailsBadgeText, { color: colors.primary }]}>{selectedAnnouncement.category}</Text>
+                    </View>
+                    <View style={[styles.eventDetailsBadge, { 
+                      backgroundColor: selectedAnnouncement.priority === 'Urgent' ? colors.error + '20' : colors.info + '20' 
+                    }]}>
+                      <Text style={[styles.eventDetailsBadgeText, { 
+                        color: selectedAnnouncement.priority === 'Urgent' ? colors.error : colors.info 
+                      }]}>
+                        {selectedAnnouncement.priority}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Info Cards */}
+                <View style={[styles.eventDetailsCard, { backgroundColor: colors.surface, borderLeftColor: colors.primary }]}>
+                  <View style={styles.eventDetailsCardRow}>
+                    <View style={[styles.eventDetailsCardIcon, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={styles.eventDetailsCardIconText}>👥</Text>
+                    </View>
+                    <View style={styles.eventDetailsCardInfo}>
+                      <Text style={[styles.eventDetailsCardLabel, { color: colors.textSecondary }]}>Announced For</Text>
+                      <Text style={[styles.eventDetailsCardValue, { color: colors.text }]}>{selectedAnnouncement.announced_for}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={[styles.eventDetailsCard, { backgroundColor: colors.surface, borderLeftColor: colors.primary }]}>
+                  <View style={styles.eventDetailsCardRow}>
+                    <View style={[styles.eventDetailsCardIcon, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={styles.eventDetailsCardIconText}>📅</Text>
+                    </View>
+                    <View style={styles.eventDetailsCardInfo}>
+                      <Text style={[styles.eventDetailsCardLabel, { color: colors.textSecondary }]}>Posted Date</Text>
+                      <Text style={[styles.eventDetailsCardValue, { color: colors.text }]}>
+                        {new Date(selectedAnnouncement.created_at).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Message Section - Professional and Centered */}
+                <View style={[styles.announcementMessageSection, { backgroundColor: colors.surface }]}>
+                  <View style={styles.announcementMessageHeader}>
+                    <View style={[styles.announcementMessageIconContainer, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={styles.announcementMessageIcon}>💬</Text>
+                    </View>
+                    <Text style={[styles.announcementMessageTitle, { color: colors.text }]}>Announcement Message</Text>
+                  </View>
+                  <View style={styles.announcementMessageDivider} />
+                  <Text style={[styles.announcementMessageText, { color: colors.text }]}>
+                    {selectedAnnouncement.message}
+                  </Text>
+                </View>
+
+                {/* Edit and Delete Buttons - Only when viewing from My Announcements */}
+                {viewingAnnouncementFromMyList && selectedAnnouncement.user_id === currentUserId && (
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                    <TouchableOpacity 
+                      style={[styles.eventDetailsActionButton, { backgroundColor: colors.primary, flex: 1 }]}
+                      onPress={() => {
+                        setShowAnnouncementDetails(false);
+                        editAnnouncement(selectedAnnouncement);
+                      }}
+                    >
+                      <Text style={[styles.eventDetailsActionButtonIcon]}>✏️</Text>
+                      <Text style={[styles.eventDetailsActionButtonText, { color: '#FFFFFF' }]}>Edit Announcement</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.eventDetailsActionButton, { backgroundColor: colors.error, flex: 1 }]}
+                      onPress={() => {
+                        setShowAnnouncementDetails(false);
+                        showDeleteConfirmation(selectedAnnouncement.id);
+                      }}
+                    >
+                      <Text style={[styles.eventDetailsActionButtonIcon]}>🗑️</Text>
+                      <Text style={[styles.eventDetailsActionButtonText, { color: '#FFFFFF' }]}>Delete</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -3607,7 +4480,7 @@ export default function EventsScreen() {
                       <TouchableOpacity 
                         key={c} 
                         style={[styles.formChip, formData.category === c && styles.formChipActive, 
-                          { backgroundColor: colors.surface, borderColor: colors.border }]} 
+                          formData.category !== c && { backgroundColor: colors.surface, borderColor: colors.border }]} 
                         onPress={() => setFormData({ ...formData, category: c })}
                       >
                         <Text style={[styles.formChipText, formData.category === c && styles.formChipTextActive, 
@@ -3622,7 +4495,7 @@ export default function EventsScreen() {
                       <TouchableOpacity 
                         key={a} 
                         style={[styles.formChip, formData.appearance === a && styles.formChipActive, 
-                          { backgroundColor: colors.surface, borderColor: colors.border }]} 
+                          formData.appearance !== a && { backgroundColor: colors.surface, borderColor: colors.border }]} 
                         onPress={() => setFormData({ ...formData, appearance: a })}
                       >
                         <Text style={[styles.formChipText, formData.appearance === a && styles.formChipTextActive, 
@@ -3656,7 +4529,7 @@ export default function EventsScreen() {
                           <TouchableOpacity 
                             key={p} 
                             style={[styles.formChip, formData.platform === p && styles.formChipActive, 
-                              { backgroundColor: colors.surface, borderColor: colors.border }]} 
+                              formData.platform !== p && { backgroundColor: colors.surface, borderColor: colors.border }]} 
                             onPress={() => setFormData({ ...formData, platform: p })}
                           >
                             <Text style={[styles.formChipText, formData.platform === p && styles.formChipTextActive, 
@@ -3733,6 +4606,574 @@ export default function EventsScreen() {
         onClose={hideAlert}
         colors={colors}
       />
+
+      {/* ANNOUNCEMENT MODAL */}
+      <Modal visible={isAnnouncementModalVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{selectedAnnouncement ? 'Edit Announcement' : 'New Announcement'}</Text>
+              <TouchableOpacity onPress={() => {
+                setIsAnnouncementModalVisible(false);
+                setShowAnnouncementCalendar(false);
+                setSelectedAnnouncement(null);
+                setSelectedAnnouncementDates([getTodayUTC()]);
+                setAnnouncementDayDetails({});
+                setAnnouncementData({
+                  title: '',
+                  announcedFor: '',
+                  message: '',
+                  category: 'General',
+                  priority: 'Not Urgent',
+                  image: '',
+                  hasDateTime: false,
+                  fromTime: '12:00 PM',
+                  toTime: '01:00 PM',
+                });
+              }} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.closeBtnText, { color: colors.textSecondary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {showAnnouncementCalendar ? (
+                <>
+                  <View style={[styles.calendarNavHeader, { borderBottomColor: colors.border }]}>
+                    <TouchableOpacity onPress={() => setShowAnnouncementCalendar(false)} style={[styles.calendarBackButton, { backgroundColor: colors.surface }]}>
+                      <Text style={styles.calendarBackIcon}>←</Text>
+                      <Text style={[styles.calendarBackText, { color: colors.text }]}>Back to Form</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <MultiDayCalendar
+                    selectedDates={selectedAnnouncementDates}
+                    onDatesChange={setSelectedAnnouncementDates}
+                    onApply={(dates) => {
+                      setSelectedAnnouncementDates(dates);
+                      setShowAnnouncementCalendar(false);
+                    }}
+                    colors={colors}
+                  />
+                </>
+              ) : (
+                <>
+              <View style={[styles.universityBadge, { backgroundColor: colors.primaryLight + '30' }]}>
+                <Text style={[styles.universityBadgeText, { color: colors.primary }]}>For: {userUniversity}</Text>
+              </View>
+
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Announcement Image (Optional)</Text>
+              <TouchableOpacity style={[styles.uploadBox, announcementData.image && styles.uploadBoxActive, 
+                { borderColor: colors.border, backgroundColor: colors.surface }]} onPress={async () => {
+                  const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    allowsEditing: true,
+                    aspect: [16, 9],
+                    quality: 0.8,
+                  });
+                  if (result.canceled || !result.assets?.[0]) return;
+                  console.log('Image selected:', result.assets[0].uri);
+                  setAnnouncementData({ ...announcementData, image: result.assets[0].uri });
+                }}>
+                {announcementData.image ? (
+                  <Image source={{ uri: announcementData.image }} style={styles.uploadPreview} resizeMode="contain" />
+                ) : (
+                  <View style={styles.uploadInner}>
+                    <Text style={[styles.uploadIcon, { color: colors.primary }]}>📷</Text>
+                    <Text style={[styles.uploadText, { color: colors.text }]}>Tap to select image</Text>
+                    <Text style={[styles.uploadSubtext, { color: colors.textSecondary }]}>JPEG or PNG</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Title <Text style={{ color: colors.error }}>*</Text></Text>
+              <TextInput 
+                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]} 
+                value={announcementData.title} 
+                onChangeText={txt => setAnnouncementData({ ...announcementData, title: txt })} 
+                placeholder="Enter announcement title" 
+                placeholderTextColor={colors.textSecondary}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Announced For <Text style={{ color: colors.error }}>*</Text></Text>
+              <TextInput 
+                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]} 
+                value={announcementData.announcedFor} 
+                onChangeText={txt => setAnnouncementData({ ...announcementData, announcedFor: txt })} 
+                placeholder="e.g., All Students, CS Department, First Years..." 
+                placeholderTextColor={colors.textSecondary}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                {CATEGORIES.map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => setAnnouncementData({ ...announcementData, category: cat as EventCategory })}
+                    style={[
+                      styles.categoryChip,
+                      announcementData.category === cat && styles.activeCategory,
+                      announcementData.category !== cat && { backgroundColor: colors.card, borderColor: colors.border, marginRight: 8 }
+                    ]}
+                  >
+                    <Text style={[
+                      styles.categoryText,
+                      announcementData.category === cat && styles.activeCategoryText,
+                      { color: announcementData.category === cat ? '#ffffff' : colors.textSecondary }
+                    ]}>{cat}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Message <Text style={{ color: colors.error }}>*</Text></Text>
+              <TextInput 
+                style={[styles.input, styles.textArea, { height: 180, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]} 
+                value={announcementData.message} 
+                onChangeText={txt => setAnnouncementData({ ...announcementData, message: txt })} 
+                placeholder="Enter your announcement message..." 
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={10}
+                textAlignVertical="top"
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Priority</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                {['Not Urgent', 'Urgent'].map(priority => (
+                  <TouchableOpacity
+                    key={priority}
+                    onPress={() => setAnnouncementData({ ...announcementData, priority: priority as 'Not Urgent' | 'Urgent' })}
+                    style={[
+                      styles.priorityButton,
+                      announcementData.priority === priority && styles.priorityButtonActive,
+                      {
+                        backgroundColor: announcementData.priority === priority 
+                          ? (priority === 'Urgent' ? colors.error : colors.primary)
+                          : colors.surface,
+                        borderColor: colors.border
+                      }
+                    ]}
+                  >
+                    <Text style={[
+                      styles.priorityButtonText,
+                      { color: announcementData.priority === priority ? '#ffffff' : colors.text }
+                    ]}>
+                      {priority === 'Urgent' ? '🔴 ' : '🟢 '}{priority}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.dateTimeToggle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setAnnouncementData({ ...announcementData, hasDateTime: !announcementData.hasDateTime })}
+              >
+                <View style={styles.dateTimeToggleLeft}>
+                  <Text style={[styles.dateTimeToggleIcon, { color: colors.primary }]}>📅</Text>
+                  <View>
+                    <Text style={[styles.dateTimeToggleTitle, { color: colors.text }]}>Add Date & Time</Text>
+                    <Text style={[styles.dateTimeToggleSubtitle, { color: colors.textSecondary }]}>For time-sensitive announcements</Text>
+                  </View>
+                </View>
+                <View style={[styles.dateTimeToggleCheckbox, announcementData.hasDateTime && styles.dateTimeToggleCheckboxActive, 
+                  { borderColor: announcementData.hasDateTime ? colors.primary : colors.border, backgroundColor: announcementData.hasDateTime ? colors.primary : 'transparent' }]}>
+                  {announcementData.hasDateTime && (
+                    <Text style={styles.dateTimeToggleCheckmark}>✓</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {announcementData.hasDateTime && (
+                <>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Date(s)</Text>
+                  <TouchableOpacity 
+                    style={[styles.dateInputCard, { backgroundColor: colors.surface, borderColor: colors.border }]} 
+                    onPress={() => setShowAnnouncementCalendar(true)}
+                  >
+                    <View style={[styles.dateInputIconContainer, { backgroundColor: colors.card }]}>
+                      <Text style={[styles.dateInputIcon, { color: colors.primary }]}>📅</Text>
+                    </View>
+                    <View style={styles.dateInputTextContainer}>
+                      <Text style={[styles.dateInputLabel, { color: colors.text }]}>Announcement Date(s)</Text>
+                      {selectedAnnouncementDates.length === 1 ? (
+                        <Text style={[styles.dateInputValue, { color: colors.text }]}>
+                          {formatFullDate(selectedAnnouncementDates[0])}
+                        </Text>
+                      ) : (
+                        <View>
+                          <Text style={[styles.dateInputValue, { color: colors.text }]}>{selectedAnnouncementDates.length} days selected</Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 }}>
+                            {selectedAnnouncementDates.slice(0, 3).map(date => (
+                              <Text key={date} style={[styles.multiDateText, { color: colors.textSecondary }]}>
+                                Day {selectedAnnouncementDates.indexOf(date) + 1}: {new Date(date).toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                })}{'  '}
+                              </Text>
+                            ))}
+                            {selectedAnnouncementDates.length > 3 && (
+                              <Text style={[styles.multiDateText, { color: colors.textSecondary }]}>
+                                ... +{selectedAnnouncementDates.length - 3} more
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.dateInputArrow, { color: colors.textSecondary }]}>›</Text>
+                  </TouchableOpacity>
+
+                  {selectedAnnouncementDates.length > 1 && (
+                    <>
+                      <Text style={[styles.inputLabel, { color: colors.text }]}>Times per Day</Text>
+                      <View style={[styles.daysSummaryContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        {selectedAnnouncementDates.map((date, index) => {
+                          const dayDetail = announcementDayDetails[date];
+                          const dayFromTime = dayDetail?.fromTime || announcementData.fromTime;
+                          const dayToTime = dayDetail?.toTime || announcementData.toTime;
+                          const hasCustomTime = announcementDayDetails[date] !== undefined;
+                          
+                          return (
+                            <View key={date} style={[styles.daySummaryRow, { borderBottomColor: colors.border }]}>
+                              <View style={styles.dayNumberBadge}>
+                                <Text style={[styles.dayNumberText, { color: colors.primary }]}>Day {index + 1}</Text>
+                                {hasCustomTime && (
+                                  <View style={[styles.customBadge, { backgroundColor: colors.success }]}>
+                                    <Text style={styles.customBadgeText}>Custom</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <View style={styles.daySummaryContent}>
+                                <Text style={[styles.daySummaryDate, { color: colors.text }]}>{formatFullDate(date)}</Text>
+                                <Text style={[styles.daySummaryTime, { color: colors.textSecondary }]}>
+                                  {formatTimeDisplay(dayFromTime)} - {formatTimeDisplay(dayToTime)}
+                                </Text>
+                              </View>
+                              <TouchableOpacity 
+                                style={[styles.editDayTimeButton, { backgroundColor: colors.card, borderColor: colors.primary }]}
+                                onPress={() => {
+                                  setEditingAnnouncementDayIndex(index);
+                                  setEditingAnnouncementDayDate(date);
+                                  setShowAnnouncementDayEditor(true);
+                                }}
+                              >
+                                <Text style={[styles.editDayTimeText, { color: colors.primary }]}>Edit</Text>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </>
+                  )}
+
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>From Time</Text>
+                  <AdvancedTimePicker 
+                    time={announcementData.fromTime}
+                    onTimeChange={(time) => setAnnouncementData({ ...announcementData, fromTime: time })}
+                    label="From"
+                    colors={colors}
+                  />
+
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>To Time</Text>
+                  <AdvancedTimePicker 
+                    time={announcementData.toTime}
+                    onTimeChange={(time) => setAnnouncementData({ ...announcementData, toTime: time })}
+                    label="To"
+                    colors={colors}
+                  />
+                </>
+              )}
+
+              <TouchableOpacity 
+                style={[styles.submitButton, { backgroundColor: colors.primary, marginTop: 20, marginBottom: 40 }]} 
+                onPress={async () => {
+                  if (!announcementData.title || !announcementData.announcedFor || !announcementData.message) {
+                    showAlert('Missing Fields', 'Please fill in title, target audience, and message');
+                    return;
+                  }
+
+                  // If editing, use saveEditedAnnouncement
+                  if (selectedAnnouncement) {
+                    await saveEditedAnnouncement();
+                    return;
+                  }
+
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) {
+                      showAlert('Error', 'You must be logged in to post announcements');
+                      return;
+                    }
+
+                    // Upload image if provided
+                    let imageUrl: string = '';
+                    if (announcementData.image && !announcementData.image.startsWith('https://')) {
+                      console.log('Image to upload:', announcementData.image);
+                      const uploadedUrl = await uploadImageToSupabase(announcementData.image, 'announcements');
+                      console.log('Upload result:', uploadedUrl);
+                      if (uploadedUrl) {
+                        imageUrl = uploadedUrl;
+                      } else {
+                        console.warn('Image upload failed, continuing without image');
+                      }
+                    }
+
+                    // Insert announcement into database
+                    console.log('Saving announcement with image URL:', imageUrl);
+                    const { error } = await supabase
+                      .from('announcements')
+                      .insert({
+                        title: announcementData.title,
+                        announced_for: announcementData.announcedFor,
+                        message: announcementData.message,
+                        category: announcementData.category,
+                        priority: announcementData.priority,
+                        image_url: imageUrl,
+                        has_date_time: announcementData.hasDateTime,
+                        announcement_dates: announcementData.hasDateTime ? JSON.stringify(selectedAnnouncementDates) : null,
+                        from_time: announcementData.hasDateTime ? announcementData.fromTime : null,
+                        to_time: announcementData.hasDateTime ? announcementData.toTime : null,
+                        per_day_times: selectedAnnouncementDates.length > 1 && announcementData.hasDateTime ? JSON.stringify(announcementDayDetails) : null,
+                        university: userUniversity,
+                        user_id: user.id,
+                        created_at: new Date().toISOString(),
+                      });
+
+                    if (error) throw error;
+
+                    setIsAnnouncementModalVisible(false);
+                    setShowAnnouncementCalendar(false);
+                    setSelectedAnnouncement(null);
+                    setSelectedAnnouncementDates([getTodayUTC()]);
+                    setAnnouncementDayDetails({});
+                    setAnnouncementData({
+                      title: '',
+                      announcedFor: '',
+                      message: '',
+                      category: 'General',
+                      priority: 'Not Urgent',
+                      image: '',
+                      hasDateTime: false,
+                      fromTime: '12:00 PM',
+                      toTime: '01:00 PM',
+                    });
+                    fetchUserAnnouncements();
+                    fetchAllAnnouncements();
+                    showAlert('Success', 'Announcement posted successfully!');
+                  } catch (error) {
+                    console.error('Error posting announcement:', error);
+                    showAlert('Error', 'Failed to post announcement. Please try again.');
+                  }
+                }}
+              >
+                <Text style={styles.submitButtonText}>{selectedAnnouncement ? 'Update Announcement' : 'Post Announcement'}</Text>
+              </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ANNOUNCEMENT DATE PICKER MODAL */}
+      <Modal visible={showAnnouncementDatePicker} transparent animationType="fade">
+        <View style={styles.timePickerOverlay}>
+          <View style={[styles.timePickerContainer, { backgroundColor: colors.card }]}>
+            <View style={[styles.timePickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.timePickerTitle, { color: colors.text }]}>Select Date</Text>
+              <TouchableOpacity onPress={() => setShowAnnouncementDatePicker(false)} style={[styles.timePickerCloseButton, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.timePickerClose, { color: colors.textSecondary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Calendar
+              minDate={getTodayUTC()}
+              onDayPress={(day: DateData) => {
+                setSelectedAnnouncementDates([day.dateString]);
+                setShowAnnouncementDatePicker(false);
+              }}
+              markedDates={{
+                [selectedAnnouncementDates[0]]: {
+                  selected: true,
+                  selectedColor: colors.primary,
+                  selectedTextColor: '#ffffff',
+                }
+              }}
+              theme={{
+                backgroundColor: colors.card,
+                calendarBackground: colors.card,
+                textSectionTitleColor: colors.textSecondary,
+                selectedDayBackgroundColor: colors.primary,
+                selectedDayTextColor: '#ffffff',
+                todayTextColor: colors.primary,
+                dayTextColor: colors.text,
+                textDisabledColor: colors.border,
+                arrowColor: colors.primary,
+                monthTextColor: colors.text,
+                textDayFontWeight: '600',
+                textMonthFontWeight: 'bold',
+                textDayHeaderFontWeight: '700',
+                textDayFontSize: 15,
+                textMonthFontSize: 18,
+                textDayHeaderFontSize: 13,
+              }}
+              style={styles.calendarStyle}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ANNOUNCEMENT DAY EDITOR MODAL */}
+      {showAnnouncementDayEditor && editingAnnouncementDayDate && (
+        <Modal visible={showAnnouncementDayEditor} animationType="slide" transparent>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Day {editingAnnouncementDayIndex + 1} Time</Text>
+                <TouchableOpacity onPress={() => setShowAnnouncementDayEditor(false)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.closeBtnText, { color: colors.textSecondary }]}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                <View style={{ padding: 20 }}>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Date</Text>
+                  <View style={[styles.dateInputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={[styles.dateInputIconContainer, { backgroundColor: colors.card }]}>
+                      <Text style={[styles.dateInputIcon, { color: colors.primary }]}>📅</Text>
+                    </View>
+                    <View style={styles.dateInputTextContainer}>
+                      <Text style={[styles.dateInputLabel, { color: colors.text }]}>Announcement Date</Text>
+                      <Text style={[styles.dateInputValue, { color: colors.text }]}>
+                        {formatFullDate(editingAnnouncementDayDate)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.inputLabel, { color: colors.text, marginTop: 20 }]}>From Time for this Day</Text>
+                  <AdvancedTimePicker 
+                    time={announcementDayDetails[editingAnnouncementDayDate]?.fromTime || announcementData.fromTime}
+                    onTimeChange={(time) => {
+                      setAnnouncementDayDetails({
+                        ...announcementDayDetails,
+                        [editingAnnouncementDayDate]: { 
+                          ...announcementDayDetails[editingAnnouncementDayDate],
+                          fromTime: time 
+                        }
+                      });
+                    }}
+                    label="From"
+                    colors={colors}
+                  />
+
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>To Time for this Day</Text>
+                  <AdvancedTimePicker 
+                    time={announcementDayDetails[editingAnnouncementDayDate]?.toTime || announcementData.toTime}
+                    onTimeChange={(time) => {
+                      setAnnouncementDayDetails({
+                        ...announcementDayDetails,
+                        [editingAnnouncementDayDate]: { 
+                          ...announcementDayDetails[editingAnnouncementDayDate],
+                          toTime: time 
+                        }
+                      });
+                    }}
+                    label="To"
+                    colors={colors}
+                  />
+
+                  <TouchableOpacity 
+                    style={[styles.submitButton, { backgroundColor: colors.primary, marginTop: 20, marginBottom: 40 }]}
+                    onPress={() => setShowAnnouncementDayEditor(false)}
+                  >
+                    <Text style={styles.submitButtonText}>Save Time</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
+
+      {/* ANNOUNCEMENT DATE PICKER MODAL */}
+      <Modal visible={showAnnouncementDatePicker} transparent animationType="fade">
+        <View style={styles.timePickerOverlay}>
+          <View style={[styles.timePickerContainer, { backgroundColor: colors.card }]}>
+            <View style={[styles.timePickerHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.timePickerTitle, { color: colors.text }]}>Select Date</Text>
+              <TouchableOpacity onPress={() => setShowAnnouncementDatePicker(false)} style={[styles.timePickerCloseButton, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.timePickerClose, { color: colors.textSecondary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Calendar
+              minDate={getTodayUTC()}
+              onDayPress={(day: DateData) => {
+                setAnnouncementData({ ...announcementData, date: day.dateString });
+                setShowAnnouncementDatePicker(false);
+              }}
+              markedDates={{
+                [announcementData.date]: {
+                  selected: true,
+                  selectedColor: colors.primary,
+                  selectedTextColor: '#ffffff',
+                }
+              }}
+              theme={{
+                backgroundColor: colors.card,
+                calendarBackground: colors.card,
+                textSectionTitleColor: colors.textSecondary,
+                selectedDayBackgroundColor: colors.primary,
+                selectedDayTextColor: '#ffffff',
+                todayTextColor: colors.primary,
+                dayTextColor: colors.text,
+                textDisabledColor: colors.border,
+                arrowColor: colors.primary,
+                monthTextColor: colors.text,
+                textDayFontWeight: '600',
+                textMonthFontWeight: 'bold',
+                textDayHeaderFontWeight: '700',
+                textDayFontSize: 15,
+                textMonthFontSize: 18,
+                textDayHeaderFontSize: 13,
+              }}
+              style={styles.calendarStyle}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* FULL SCREEN IMAGE MODAL */}
+      <Modal visible={showFullScreenImage} animationType="fade" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.95)' }}>
+          <SafeAreaView style={{ flex: 1 }}>
+            {/* Close Button */}
+            <TouchableOpacity 
+              style={{
+                position: 'absolute',
+                top: 50,
+                right: 20,
+                zIndex: 10,
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={() => setShowFullScreenImage(false)}
+            >
+              <Text style={{ fontSize: 24, color: '#fff', fontWeight: 'bold' }}>×</Text>
+            </TouchableOpacity>
+
+            {/* Full Screen Image */}
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Image 
+                source={{ uri: fullScreenImageUrl }} 
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="contain"
+              />
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -3747,6 +5188,10 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   welcomeText: { fontSize: 12, color: colors.textSecondary, fontWeight: '700', textTransform: 'uppercase' },
   header: { fontSize: 32, fontWeight: '900', color: colors.text },
   universityText: { fontSize: 14, color: colors.primary, marginTop: 4, fontWeight: '600' },
+  feedToggleContainer: { flexDirection: 'row', marginTop: 8, marginBottom: 8, gap: 8 },
+  feedToggleButton: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, minWidth: 100, alignItems: 'center' },
+  feedToggleButtonActive: { elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  feedToggleText: { fontSize: 14, fontWeight: '600' },
   addButton: { backgroundColor: colors.primary, width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   addButtonText: { color: '#ffffff', fontSize: 24 },
   filterButton: { backgroundColor: colors.primaryLight, paddingHorizontal: 16, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', position: 'relative' },
@@ -4067,6 +5512,178 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   emptyText: { fontSize: 18, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 8 },
   emptySubtext: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
 
+  announcementsList: { paddingHorizontal: 20, paddingVertical: 20 },
+  announcementCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  announcementImageContainer: {
+    width: 120,
+    height: 120,
+    overflow: 'hidden',
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+  },
+  announcementImageStyle: {
+    width: '100%',
+    height: '100%',
+  },
+  announcementImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  announcementImagePlaceholderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textTertiary,
+    textAlign: 'center',
+  },
+  announcementCardImage: {
+    width: '100%',
+    height: 150,
+  },
+  announcementCardContent: {
+    padding: 16,
+  },
+  announcementCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  announcementCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  announcementCardSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  priorityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  priorityBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  announcementCardMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  announcementCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  announcementCardDate: {
+    fontSize: 12,
+    color: colors.textTertiary,
+  },
+  announcementCardCategory: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  announcementCardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  announcementActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  announcementActionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  announcementMessageSection: {
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  announcementMessageHeader: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  announcementMessageIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  announcementMessageIcon: {
+    fontSize: 28,
+  },
+  announcementMessageTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  announcementMessageDivider: {
+    height: 2,
+    backgroundColor: colors.primary,
+    width: 60,
+    alignSelf: 'center',
+    borderRadius: 2,
+    marginBottom: 20,
+  },
+  priorityButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  priorityButtonActive: {
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  priorityButtonText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  announcementMessageText: {
+    fontSize: 16,
+    lineHeight: 26,
+    textAlign: 'left',
+    fontWeight: '400',
+    paddingHorizontal: 8,
+  },
+
   universityBadge: {
     backgroundColor: colors.primaryLight + '30',
     paddingHorizontal: 16,
@@ -4081,6 +5698,65 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
     color: colors.primary,
   },
 
+  categoryBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  dateTimeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 20,
+  },
+  dateTimeToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dateTimeToggleIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  dateTimeToggleTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  dateTimeToggleSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  dateTimeToggleCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateTimeToggleCheckboxActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dateTimeToggleCheckmark: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
   adBanner: { 
     marginHorizontal: 5, 
     marginTop: 5, 
@@ -4089,22 +5765,44 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
     borderRadius: 20, 
     marginBottom: 5, 
     overflow: 'hidden',
+    position: 'relative'
   },
-  adContent: { flex: 1, flexDirection: 'row', padding: 20 },
+  adBgImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  adBgOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)' },
+  adContent: { flex: 1, flexDirection: 'row', padding: 20, backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 16 },
   adTextSide: { flex: 1.4 },
   liveTag: { backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  liveTagText: { color: '#ffffff', fontSize: 9, fontWeight: '900' },
-  adTitle: { color: '#ffffff', fontSize: 20, fontWeight: '900' },
-  adLocation: { color: '#ffffff', opacity: 0.9, fontSize: 13 },
-  adTime: { color: '#ffffff', opacity: 0.8, fontSize: 12 },
-  adFlyerSide: { flex: 1 },
+  liveTagText: { color: '#ffffff', fontSize: 9, fontWeight: '900', textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  adTitle: { color: '#ffffff', fontSize: 20, fontWeight: '900', textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  adLocation: { color: '#ffffff', opacity: 0.95, fontSize: 13, textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  adTime: { color: '#ffffff', opacity: 0.9, fontSize: 12, textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  adFlyerSide: { flex: 1, justifyContent: 'center' },
+  adFlyerCard: { 
+    width: '68%',
+    maxHeight: 110,
+    aspectRatio: 3 / 4,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    overflow: 'hidden',
+    alignSelf: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
   adFlyerImage: { width: '100%', height: '100%' },
-  adPlaceholder: { width: '100%', height: '100%', backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  adPlaceholder: { width: '100%', height: '100%', backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
   adPlaceholderText: { color: '#ffffff', fontSize: 10 },
 
   scrollPadding: { paddingHorizontal: 20 },
   categoryChip: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: colors.card, marginRight: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  activeCategory: { backgroundColor: colors.primary, borderColor: colors.primary },
+  activeCategory: { backgroundColor: '#FF9500', borderColor: '#FF9500' },
   categoryText: { fontWeight: '600', fontSize: 13 },
   activeCategoryText: { color: '#ffffff', fontWeight: '700' },
 
@@ -4116,8 +5814,6 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   placeholderText: { fontSize: 10, color: colors.textSecondary, fontWeight: 'bold' },
   cardContent: { flex: 1, paddingLeft: 16 },
   tagRow: { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
-  categoryBadge: { backgroundColor: colors.surface, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  categoryBadgeText: { fontSize: 9, fontWeight: '800', color: colors.textSecondary },
   appearanceBadge: { backgroundColor: colors.primaryLight + '30', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   appearanceBadgeText: { fontSize: 9, fontWeight: '800', color: colors.primary },
   multiDayBadge: { backgroundColor: colors.info + '20', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
@@ -4355,7 +6051,7 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
 
   selectionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
   formChip: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  formChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  formChipActive: { backgroundColor: '#FF9500', borderColor: '#FF9500' },
   formChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   formChipTextActive: { color: '#ffffff', fontWeight: '700' },
 

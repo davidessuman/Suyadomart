@@ -324,7 +324,7 @@ export default function ProfileScreen() {
         quality: 0.8,
       });
 
-      if (result.canceled || !result.assets?.[0]?.uri) {
+      if (result.canceled || !result.assets?.[0]) {
         setAvatarLoading(false);
         return;
       }

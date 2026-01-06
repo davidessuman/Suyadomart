@@ -73,9 +73,15 @@ export default function RootLayout() {
       const inAuth = segments[0] === 'auth';
       const inTabs = segments[0] === '(tabs)';
       const otpPending = await AsyncStorage.getItem('otp_pending');
+      const passwordResetFlow = await AsyncStorage.getItem('password_reset_flow');
 
       // 1. Authenticated User
       if (session) {
+        // Don't auto-redirect if in password reset flow
+        if (passwordResetFlow === 'true') {
+          if (!inAuth) router.replace('/auth');
+          return;
+        }
         if (otpPending === 'true') {
           if (!inAuth) router.replace('/auth');
           return;

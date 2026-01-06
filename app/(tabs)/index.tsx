@@ -30,7 +30,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { formatDistanceToNow, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, isWithinInterval, format, addDays, subDays } from 'date-fns';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, usePathname } from 'expo-router';
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
@@ -6226,6 +6226,7 @@ export default function BuyerScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
   const params = useLocalSearchParams();
   const FEED_ITEM_HEIGHT = height;
   
@@ -7524,6 +7525,15 @@ export default function BuyerScreen() {
 
   const loadProducts = useCallback(async (currentPage: number) => {
     if (!hasMore && currentPage > 0) return;
+
+    // Skip university gating on onboarding/auth routes so we don't show alerts there
+    const skipUniversityCheck = pathname?.includes('onboarding') || pathname?.includes('auth');
+    if (skipUniversityCheck) {
+      setLoadingInitial(false);
+      setLoadingMore(false);
+      return;
+    }
+
     try {
       currentPage === 0 ? setLoadingInitial(true) : setLoadingMore(true);
       const from = currentPage * PAGE_SIZE;
@@ -7689,7 +7699,7 @@ export default function BuyerScreen() {
       setLoadingInitial(false);
       setLoadingMore(false);
     }
-  }, [hasMore]);
+  }, [hasMore, pathname]);
 
   useEffect(() => {
     loadProducts(0);

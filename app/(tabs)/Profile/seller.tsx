@@ -6,15 +6,16 @@ import {
   ActivityIndicator, SafeAreaView, Dimensions, TextInput,
   Modal, KeyboardAvoidingView, Platform, FlatList,
   RefreshControl, useColorScheme, Linking, StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { Video, ResizeMode } from 'expo-av';
 import { format } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ClipboardExpo from 'expo-clipboard';
+import ResponsiveVideo from '../../components/ResponsiveVideo';
 
 const { width, height } = Dimensions.get('window');
 // const isTablet = width >= 768;
@@ -561,6 +562,7 @@ function SellerDashboardContent() {
   const colorScheme = useColorScheme();
   const themeColors = colorScheme === 'dark' ? darkColors : lightColors;
   const { showAlert, showConfirmation } = useAlert(); // Use custom alert system
+
   
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
@@ -1707,12 +1709,11 @@ function SellerDashboardContent() {
                       }}
                     >
                       {media.type === 'video' ? (
-                        <Video
-                          source={{ uri: media.uri }}
-                          style={styles.mediaSelectThumbnail}
-                          resizeMode="cover"
-                          shouldPlay={false}
-                          isMuted
+                        <ResponsiveVideo
+                          uri={media.uri}
+                          autoPlay={false}
+                          controls={false}
+                          containerStyle={[styles.mediaSelectThumbnail, { borderRadius: 12 }]}
                         />
                       ) : (
                         <Image
@@ -1838,13 +1839,11 @@ function SellerDashboardContent() {
                   onPress={() => { setFullViewerIndex(currentMediaIndex); setFullViewerVisible(true); }}
                 >
                   {/* Video for display */}
-                  <Video
-                    source={{ uri: selectedProductDetail.media_urls[currentMediaIndex] }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="contain"
-                    shouldPlay={false}
-                    isMuted={true}
-                    useNativeControls={false}
+                  <ResponsiveVideo
+                    uri={selectedProductDetail.media_urls[currentMediaIndex]}
+                    autoPlay={false}
+                    controls
+                    containerStyle={{ width: '100%', height: '100%', borderRadius: 16 }}
                   />
                   
                   {/* Play Button Overlay */}
@@ -1985,12 +1984,11 @@ function SellerDashboardContent() {
                       >
                         {url.includes('.mp4') ? (
                           <View style={styles.videoThumbnailWrapper}>
-                            <Video 
-                              source={{ uri: url }} 
-                              style={styles.thumbnailImage} 
-                              resizeMode="cover" 
-                              shouldPlay={false} 
-                              isMuted 
+                            <ResponsiveVideo
+                              uri={url}
+                              autoPlay={false}
+                              controls={false}
+                              containerStyle={[styles.thumbnailImage, { borderRadius: 10 }]}
                             />
                             <View style={styles.videoOverlay}>
                               <Ionicons name="play" size={16} color="#fff" />
@@ -2344,7 +2342,12 @@ function SellerDashboardContent() {
             
             {cover ? (cover.includes('.mp4') ? (
               <View style={styles.productImageContainer}>
-                <Video source={{ uri: cover }} style={styles.productListImage} resizeMode="cover" shouldPlay={false} isMuted useNativeControls={false} />
+                <ResponsiveVideo
+                  uri={cover}
+                  autoPlay={false}
+                  controls
+                  containerStyle={[styles.productListImage, { borderRadius: 16 }]}
+                />
                 <View style={styles.playIcon}><Ionicons name="play-circle" size={40} color="#fff" /></View>
               </View>
             ) : (
@@ -2488,15 +2491,15 @@ function SellerDashboardContent() {
   const uploadProfilePhoto = async () => {
     if (!session?.user) return;
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({ 
-        mediaTypes: ImagePicker.MediaTypeOptions.Images, 
-        allowsEditing: true, 
-        aspect: [1, 1], 
-        quality: 0.8 
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
       });
       
-      if (result.canceled || !result.assets?.[0]!.uri) return;
-  
+      if (result.canceled || !result.assets?.[0]) return;
+      
       const uri = result.assets[0].uri;
       const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const filePath = `${session.user.id}/avatar.${fileExt}`;
@@ -2839,20 +2842,20 @@ function SellerDashboardContent() {
   };
 
   const pickMedia = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ 
-      mediaTypes: ImagePicker.MediaTypeOptions.All, 
-      allowsMultipleSelection: true, 
-      selectionLimit: 10 - selectedMedia.length, 
-      quality: 0.8 
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsMultipleSelection: true,
+      quality: 0.8,
     });
     
-    if (!result.canceled && result.assets) {
-      const newMedia = result.assets.map(asset => ({ 
-        uri: asset.uri, 
-        type: asset.type === 'video' ? 'video' as const : 'image' as const 
-      }));
-      setSelectedMedia(prev => [...prev, ...newMedia].slice(0, 10));
-    }
+    if (result.canceled || !result.assets) return;
+
+    const newMedia = result.assets.map(asset => ({ 
+      uri: asset.uri, 
+      type: asset.type || 'image'
+    }));
+    
+    setSelectedMedia(prev => [...prev, ...newMedia].slice(0, 10));
   };
 
   const removeMedia = (index: number) => setSelectedMedia(prev => prev.filter((_, i) => i !== index));
@@ -3497,7 +3500,16 @@ function SellerDashboardContent() {
                 <TouchableOpacity style={[styles.addMediaBox, { borderColor: themeColors.primary, backgroundColor: themeColors.inputBackground }]} onPress={pickMedia}><Ionicons name="camera" size={28} color={themeColors.primary} /><Text style={[styles.addMediaText, { color: themeColors.primary }]}>Add Media</Text></TouchableOpacity>
                 {selectedMedia.map((item, index) => (
                   <View key={index} style={styles.mediaItemContainer}>
-                    {item.type === 'video' ? <Video source={{ uri: item.uri }} style={styles.formMediaThumbnail} resizeMode="cover" shouldPlay={false} isMuted useNativeControls={false} /> : <Image source={{ uri: item.uri }} style={styles.formMediaThumbnail} />}
+                    {item.type === 'video' ? (
+                      <ResponsiveVideo
+                        uri={item.uri}
+                        autoPlay={false}
+                        controls={false}
+                        containerStyle={[styles.formMediaThumbnail, { borderRadius: 16 }]}
+                      />
+                    ) : (
+                      <Image source={{ uri: item.uri }} style={styles.formMediaThumbnail} />
+                    )}
                     {index === 0 && <View style={[styles.coverBadge, { backgroundColor: 'rgba(0,0,0,0.6)' }]}><Text style={styles.coverBadgeText}>COVER</Text></View>}
                     {item.type === 'video' && <>
                       <View style={styles.videoPlayIcon}><Ionicons name="play-circle" size={40} color="#fff" /></View>
@@ -3930,6 +3942,7 @@ function SellerDashboardContent() {
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -3950,7 +3963,7 @@ const FullImageViewer: React.FC<{
   initialIndex: number;
 }> = ({ isVisible, onClose, mediaUrls, initialIndex }) => {
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
-  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const videoRefs = useRef<{ [key: number]: any }>({});
@@ -3960,9 +3973,15 @@ const FullImageViewer: React.FC<{
   useEffect(() => {
     if (isVisible && initialIndex >= 0 && initialIndex < (mediaUrls || []).length) {
       setCurrentIndex(initialIndex);
-      setIsVideoPlaying(true);
+      setIsVideoPlaying(false);
       setShowControls(true);
-      setTimeout(() => listRef.current?.scrollToIndex({ index: initialIndex, animated: false }), 50);
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+        // Auto-play after a short delay to allow video to load
+        setTimeout(() => {
+          setIsVideoPlaying(true);
+        }, 500);
+      }, 50);
     }
   }, [isVisible, initialIndex, mediaUrls]);
 
@@ -4023,6 +4042,8 @@ const FullImageViewer: React.FC<{
     }
   };
 
+  const { width: winWidth } = useWindowDimensions();
+
   if (!isVisible || !mediaUrls?.length) return null;
 
   const currentUrl = mediaUrls[currentIndex];
@@ -4042,10 +4063,12 @@ const FullImageViewer: React.FC<{
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          decelerationRate="fast"
           keyExtractor={(_, i) => i.toString()}
-          getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+          getItemLayout={(_, i) => ({ length: winWidth, offset: winWidth * i, index: i })}
           onMomentumScrollEnd={(e) => {
-            const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+            const newIndex = Math.round(e.nativeEvent.contentOffset.x / winWidth);
             setCurrentIndex(newIndex);
             setIsVideoPlaying(true);
             setShowControls(true);
@@ -4053,23 +4076,29 @@ const FullImageViewer: React.FC<{
           renderItem={({ item: url, index }) => {
             const isVideo = url?.toLowerCase().includes('.mp4');
             return (
-              <TouchableOpacity style={viewerStyles.fullViewerMediaSlide} activeOpacity={1} onPress={handleScreenTap}>
+              <TouchableOpacity style={[viewerStyles.fullViewerMediaSlide, { width: winWidth, alignSelf: 'center' }]} activeOpacity={1} onPress={handleScreenTap}>
                 {isVideo ? (
-                  <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                    <Video
-                      ref={(ref) => { videoRefs.current[index] = ref; }}
-                      source={{ uri: url }}
-                      style={{ width: width, height: height }}
-                      resizeMode={ResizeMode.COVER}
-                      isLooping
-                      shouldPlay={index === currentIndex && isVideoPlaying}
-                      isMuted={isVideoMuted}
-                      useNativeControls={false}
-                      onError={(error) => console.error('Video playback error:', error)}
+                  <View style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
+                    <ResponsiveVideo
+                      uri={url}
+                      autoPlay={currentIndex === index && isVideoPlaying}
+                      controls={false}
+                      muted={isVideoMuted}
+                      onRef={(ref) => { videoRefs.current[index] = ref; }}
+                      onStatus={(status: any) => setIsVideoPlaying(!!status?.isPlaying)}
+                      containerStyle={{
+                        width: '100%',
+                        maxWidth: 1200,
+                        alignSelf: 'center',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        borderRadius: 16,
+                        backgroundColor: '#000',
+                      }}
                     />
                     {showControls && (
-                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
-                        <TouchableOpacity onPress={handlePlayPause} style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 30 }}>
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent', zIndex: 5 }} pointerEvents="box-none">
+                        <TouchableOpacity onPress={handlePlayPause} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 30 }}>
                           <Ionicons name={isVideoPlaying ? 'pause' : 'play'} size={40} color="#fff" />
                         </TouchableOpacity>
                       </View>
@@ -4092,6 +4121,8 @@ const viewerStyles = StyleSheet.create({
   fullViewerContainer: {
     flex: 1,
     backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fullViewerCloseButton: {
     position: 'absolute',
@@ -4104,7 +4135,7 @@ const viewerStyles = StyleSheet.create({
   },
   fullViewerMediaSlide: {
     width: width,
-    height: height,
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',

@@ -174,6 +174,8 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 };
 
+export default AlertProvider;
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,

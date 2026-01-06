@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+*.expo/*
 
 # Native
 .kotlin/
@@ -25,6 +26,8 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+package-lock.json
+yarn.lock
 
 # macOS
 .DS_Store
