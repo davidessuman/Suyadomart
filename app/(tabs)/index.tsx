@@ -6073,6 +6073,25 @@ const ProductFeedCard: React.FC<{
 
   return (
     <View style={{ height: ITEM_HEIGHT, width, backgroundColor: theme.background }}>
+      {/* Top Separator Border - Professional Product Boundary */}
+      <View style={[
+        styles.productSeparator,
+        { 
+          backgroundColor: theme.primary,
+          shadowColor: theme.primary,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.6,
+          shadowRadius: 8,
+          elevation: 10,
+        }
+      ]} />
+      
+      {/* Gradient Fade-in Effect at Top */}
+      <LinearGradient
+        colors={[theme.background, 'transparent']}
+        style={styles.topGradientFade}
+      />
+      
       <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: theme.overlay }} />
       <TouchableOpacity activeOpacity={1} style={[styles.mediaContainer, { alignItems: 'center', justifyContent: 'center' }]} onPress={handleTap}>
         {/* TikTok-style video display on feed (centered on desktop, full-width on mobile) */}
@@ -6124,6 +6143,19 @@ const ProductFeedCard: React.FC<{
         colors={['transparent', theme.gradientStart, theme.gradientEnd]} 
         style={[styles.gradientOverlay, { height: ITEM_HEIGHT * 0.4 }]} 
       />
+      
+      {/* Bottom Separator - Distinct Product End Marker */}
+      <View style={[
+        styles.bottomProductMarker,
+        { 
+          backgroundColor: theme.surface,
+          borderTopColor: theme.primary,
+          borderTopWidth: 3,
+        }
+      ]}>
+        <View style={[styles.swipeIndicator, { backgroundColor: theme.textTertiary }]} />
+        <Text style={[styles.swipeText, { color: theme.textSecondary }]}>Swipe up for next product</Text>
+      </View>
       
       {/* Left Sidebar with Cart and Order Icons */}
       <View style={[styles.leftSidebar, { top: insets.top + 80 }]}>
@@ -6195,19 +6227,44 @@ const ProductFeedCard: React.FC<{
         </TouchableOpacity>
       </View>
       
-      <View style={[styles.bottomInfoContainer, { width: width - 80, bottom: insets.bottom + 16 }]}>
-        <Text style={[styles.titleTeaser, { color: theme.primary }]} numberOfLines={2}>{item.title}</Text>
-        <View style={styles.userInfoColumn}>
-          <Text style={[styles.username, { color: '#ffffffff' }]}>
-            @{(item.display_name || '').replace(/\s/g, '').toLowerCase()}
-          </Text>
+      <View style={[styles.bottomInfoContainer, { width: width - 80, bottom: insets.bottom + 50 }]}>
+        {/* Product Info Card with Modern Design */}
+        <View style={[
+          styles.productInfoCard,
+          {
+            backgroundColor: `${theme.background}E6`,
+            borderColor: theme.border,
+            shadowColor: theme.shadow,
+          }
+        ]}>
+          <View style={[styles.productCardHeader, { borderBottomColor: theme.border }]}>
+            <Ionicons name="pricetag" size={16} color={theme.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.productLabel, { color: theme.textSecondary }]}>PRODUCT</Text>
+          </View>
+          <Text style={[styles.titleTeaser, { color: theme.text }]} numberOfLines={2}>{item.title}</Text>
+          <View style={styles.userInfoColumn}>
+            <Text style={[styles.username, { color: theme.primary }]}>
+              @{(item.display_name || '').toLowerCase()}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={[
+              styles.viewProductButton, 
+              { 
+                backgroundColor: theme.primary,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 5,
+              }
+            ]} 
+            onPress={() => openModal(item, false)}
+          >
+            <Ionicons name="eye" size={16} color={theme.background} style={{ marginRight: 6 }} />
+            <Text style={[styles.viewProductButtonText, { color: theme.background }]}>View Details</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity 
-          style={[styles.viewProductButton, { backgroundColor: theme.primary }]} 
-          onPress={() => openModal(item, false)}
-        >
-          <Text style={[styles.viewProductButtonText, { color: theme.background }]}>View Product Details</Text>
-        </TouchableOpacity>
       </View>
       <ShareModal
         isVisible={shareMenuVisible}
@@ -8413,14 +8470,85 @@ const styles = StyleSheet.create({
   discountBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 15, marginBottom: 25 },
   discountText: { color: '#fff', fontWeight: '900', fontSize: 14 },
   
-  // Bottom Info
-  bottomInfoContainer: { position: 'absolute', left: 18, zIndex: 10 ,marginBottom: 25},
-  titleTeaser: { fontSize: 18, fontWeight: '500', marginBottom: 5, textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 5 },
-  userInfoColumn: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 8 },
-  username: { fontWeight: '700', fontSize: 17, textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 5 },
-  universityText: { fontSize: 14, fontWeight: '500', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 3 },
-  viewProductButton: {  alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 9, marginVertical: 4 },
-  viewProductButtonText: { fontWeight: '700', fontSize: 13 },
+  // Product Separators & Boundaries
+  productSeparator: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 5,
+    zIndex: 100,
+  },
+  topGradientFade: {
+    position: 'absolute',
+    top: 5,
+    left: 0,
+    right: 0,
+    height: 60,
+    zIndex: 99,
+  },
+  bottomProductMarker: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 50,
+    zIndex: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 8,
+  },
+  swipeIndicator: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 6,
+    opacity: 0.6,
+  },
+  swipeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    opacity: 0.7,
+  },
+  
+  // Bottom Info - Modern Card Design
+  bottomInfoContainer: { position: 'absolute', left: 18, zIndex: 10, marginBottom: 25 },
+  productInfoCard: {
+    backgroundColor: '#FFFFFFCC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  productCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+  },
+  productLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  titleTeaser: { fontSize: 18, fontWeight: '600', marginBottom: 6, lineHeight: 24 },
+  userInfoColumn: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10 },
+  username: { fontWeight: '700', fontSize: 15, letterSpacing: 0.3 },
+  universityText: { fontSize: 14, fontWeight: '500', marginTop: 2 },
+  viewProductButton: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start', 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 12, 
+    marginTop: 4,
+  },
+  viewProductButtonText: { fontWeight: '700', fontSize: 14, letterSpacing: 0.3 },
   
   // Product Detail Modal
   modalCenteredView: { flex: 1, justifyContent: 'flex-end' },
