@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, StyleProp, ViewStyle, ActivityIndicator } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 
 export type ResponsiveVideoProps = {
@@ -22,6 +22,7 @@ const ResponsiveVideo: React.FC<ResponsiveVideoProps> = ({
   onStatus,
 }) => {
   const videoRef = useRef<Video | null>(null);
+  const [isBuffering, setIsBuffering] = useState(false);
 
   useEffect(() => {
     onRef?.(videoRef.current);
@@ -37,6 +38,13 @@ const ResponsiveVideo: React.FC<ResponsiveVideoProps> = ({
     }
   }, [autoPlay]);
 
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setIsBuffering(status.isBuffering || false);
+    }
+    onStatus?.(status);
+  };
+
   return (
     <View style={[styles.container, containerStyle]}>
       <Video
@@ -50,8 +58,13 @@ const ResponsiveVideo: React.FC<ResponsiveVideoProps> = ({
         useNativeControls={controls}
         isMuted={muted}
         isLooping
-        onPlaybackStatusUpdate={onStatus}
+        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
       />
+      {isBuffering && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#FF9900" />
+        </View>
+      )}
     </View>
   );
 };
@@ -65,6 +78,12 @@ const styles = StyleSheet.create({
   video: {
     width: '100%',
     height: '100%',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
 });
 

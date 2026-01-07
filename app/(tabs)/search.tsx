@@ -33,6 +33,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 import ResponsiveVideo from '../components/ResponsiveVideo';
+import { Video, ResizeMode } from 'expo-av';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const PRIMARY_COLOR = '#F68B1E';
@@ -2187,15 +2188,12 @@ const FullImageViewer: React.FC<{
   initialIndex: number;
 }> = ({ isVisible, onClose, mediaUrls, initialIndex }) => {
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
-  const [isPlaying, setIsPlaying] = useState(false);
-  const videoRefs = useRef<{ [key: number]: any }>({});
   const listRef = useRef<FlatList<any> | null>(null);
-  const { width: winWidth } = useWindowDimensions();
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
 
   useEffect(() => {
     if (isVisible && initialIndex >= 0 && initialIndex < mediaUrls.length) {
       setCurrentIndex(initialIndex);
-      setIsPlaying(false);
       setTimeout(() => {
         listRef.current?.scrollToIndex({ index: initialIndex, animated: false });
       }, 50);
@@ -2221,70 +2219,52 @@ const FullImageViewer: React.FC<{
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          decelerationRate="fast"
           keyExtractor={(_, i) => i.toString()}
           getItemLayout={(_, i) => ({ length: winWidth, offset: winWidth * i, index: i })}
           onMomentumScrollEnd={(e) => {
             const newIndex = Math.round(e.nativeEvent.contentOffset.x / winWidth);
             setCurrentIndex(newIndex);
-            setIsPlaying(false);
           }}
           renderItem={({ item: url, index }) => {
             const isVideo = isVideoUrl(url);
+            const videoUri = url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
+            const containerMaxWidth = Math.min(winWidth * 0.95, 1200);
+            const containerMaxHeight = Math.min(winHeight * 0.95, 1200);
+            const isDesktop = winWidth >= 1024;
+            
             return (
-              <View style={[styles.fullViewerMediaSlide, { width: winWidth, alignSelf: 'center' }]}>
-                {isVideo ? (
-                  <>
-                    <ResponsiveVideo
-                      uri={url}
-                      autoPlay={currentIndex === index}
-                      controls
-                      containerStyle={{
-                        width: '100%',
-                        maxWidth: 1200,
-                        alignSelf: 'center',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        borderRadius: 12,
-                        backgroundColor: '#000',
-                      }}
-                      onRef={(ref) => { videoRefs.current[index] = ref; }}
-                      onStatus={(status: any) => setIsPlaying(!!status?.isPlaying)}
+              <View style={[styles.fullViewerMediaSlide, { 
+                width: winWidth, 
+                alignSelf: 'center', 
+                backgroundColor: '#000', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                paddingHorizontal: isDesktop ? 40 : 0,
+              }]}>
+                <View style={{ 
+                  width: containerMaxWidth, 
+                  height: containerMaxHeight, 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  alignSelf: 'center',
+                }}>
+                  {isVideo ? (
+                    <Video
+                      source={{ uri: videoUri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping
+                      shouldPlay={currentIndex === index}
+                      useNativeControls
                     />
-                    <TouchableOpacity
-                      style={{ position: 'absolute', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%' }}
-                      activeOpacity={0.8}
-                      onPress={async () => {
-                        const ref = videoRefs.current[index];
-                        if (!ref || typeof ref.getStatusAsync !== 'function') return;
-                        const status = await ref.getStatusAsync();
-                        if (status.isPlaying) {
-                          await ref.pauseAsync();
-                          setIsPlaying(false);
-                        } else {
-                          await ref.playAsync();
-                          setIsPlaying(true);
-                        }
-                      }}
-                    >
-                      <View style={{ backgroundColor: 'rgba(0,0,0,0.45)', padding: 14, borderRadius: 32 }}>
-                        <Ionicons name={isPlaying && currentIndex === index ? 'pause' : 'play'} size={32} color="#fff" />
-                      </View>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <Image 
-                    source={{ uri: url || 'https://via.placeholder.com/400' }} 
-                    style={styles.fullViewerMediaImage} 
-                    resizeMode="contain" 
-                  />
-                )}
-                {isVideo && (
-                  <View style={{ position: 'absolute', top: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 16 }}>
-                    <Ionicons name="videocam" size={18} color="#fff" />
-                  </View>
-                )}
+                  ) : (
+                    <Image 
+                      source={{ uri: url || 'https://via.placeholder.com/400' }} 
+                      style={styles.fullViewerMediaImage} 
+                      resizeMode="contain" 
+                    />
+                  )}
+                </View>
               </View>
             );
           }}
@@ -2293,54 +2273,6 @@ const FullImageViewer: React.FC<{
         {/* Media counter */}
         {mediaUrls.length > 1 && (
           <Text style={styles.fullViewerPaginationText}>{currentIndex + 1} / {mediaUrls.length}</Text>
-        )}
-
-        {/* Navigation arrows for multiple items */}
-        {mediaUrls.length > 1 && (
-          <>
-            {currentIndex > 0 && (
-              <TouchableOpacity 
-                style={{
-                  position: 'absolute',
-                  left: 20,
-                  top: '50%',
-                  transform: [{ translateY: -20 }],
-                  backgroundColor: 'rgba(255,255,255,0.3)',
-                  padding: 10,
-                  borderRadius: 25,
-                  zIndex: 10
-                }}
-                onPress={() => {
-                  const newIndex = currentIndex - 1;
-                  setCurrentIndex(newIndex);
-                  listRef.current?.scrollToIndex({ index: newIndex, animated: true });
-                }}
-              >
-                <Ionicons name="chevron-back" size={28} color="#fff" />
-              </TouchableOpacity>
-            )}
-            {currentIndex < mediaUrls.length - 1 && (
-              <TouchableOpacity 
-                style={{
-                  position: 'absolute',
-                  right: 20,
-                  top: '50%',
-                  transform: [{ translateY: -20 }],
-                  backgroundColor: 'rgba(255,255,255,0.3)',
-                  padding: 10,
-                  borderRadius: 25,
-                  zIndex: 10
-                }}
-                onPress={() => {
-                  const newIndex = currentIndex + 1;
-                  setCurrentIndex(newIndex);
-                  listRef.current?.scrollToIndex({ index: newIndex, animated: true });
-                }}
-              >
-                <Ionicons name="chevron-forward" size={28} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </>
         )}
       </View>
     </Modal>

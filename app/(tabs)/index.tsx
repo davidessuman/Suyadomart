@@ -6100,25 +6100,22 @@ const ProductFeedCard: React.FC<{
             { flex: 1, backgroundColor: theme.background, width: '100%' },
             isLargeScreenCard && { width: Math.min(width * 0.7, 500), alignSelf: 'center' }
           ]}>
-            <View style={{ width: '100%', height: '97%' }}>
-              <Video
-                source={{ uri: item.media_urls?.[0] }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode={ResizeMode.COVER}
-                isLooping
-                shouldPlay={isPlaying}
-                useNativeControls={false}
-                ref={(ref: any) => { localVideoRef.current = ref; if (videoRef) videoRef(ref); }}
-                onPlaybackStatusUpdate={(status: any) => {
-                  setIsBuffering(!!status.isBuffering);
-                  setIsPlaying(!!status.isPlaying);
-                }}
-              />
-
-              {isBuffering && (
-                <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color={theme.primary} />
-                </View>
+            <View style={{ width: '100%', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              {item.media_urls?.[0] && (
+                <Video
+                  source={{ uri: item.media_urls[0].startsWith('http') ? item.media_urls[0] : `${SUPABASE_URL}/storage/v1/object/public/products/${item.media_urls[0]}` }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode={isLargeScreenCard ? ResizeMode.COVER : ResizeMode.CONTAIN}
+                  isLooping
+                  shouldPlay={isPlaying}
+                  useNativeControls={false}
+                  ref={(ref: any) => { localVideoRef.current = ref; if (videoRef) videoRef(ref); }}
+                  onPlaybackStatusUpdate={(status: any) => {
+                    setIsBuffering(!!status.isBuffering);
+                    setIsPlaying(!!status.isPlaying);
+                  }}
+                  progressUpdateIntervalMillis={500}
+                />
               )}
 
               {!isPlaying && !isBuffering && (
@@ -7532,6 +7529,7 @@ export default function BuyerScreen() {
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (!viewableItems.length) return;
    
+    // Pause all videos first
     Object.values(videoRefs.current).forEach(v => {
       if (v && typeof v.pauseAsync === 'function') {
         v.pauseAsync();
@@ -7541,7 +7539,14 @@ export default function BuyerScreen() {
     const visibleItem = viewableItems[0]?.item;
     if (visibleItem?.isVideo && videoRefs.current[visibleItem.id]) {
       try {
-        videoRefs.current[visibleItem.id].playAsync();
+        // Restart video from beginning when returning to it
+        const videoRef = videoRefs.current[visibleItem.id];
+        videoRef.setPositionAsync(0).then(() => {
+          videoRef.playAsync();
+        }).catch(() => {
+          // If setPositionAsync fails, just play from current position
+          videoRef.playAsync();
+        });
         setCurrentlyPlayingId(visibleItem.id);
       } catch (error) {
         console.error('Error playing video:', error);

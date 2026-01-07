@@ -16,8 +16,10 @@ import { format } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ClipboardExpo from 'expo-clipboard';
 import ResponsiveVideo from '../../components/ResponsiveVideo';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
+const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 // const isTablet = width >= 768;
 const isDesktop = width >= 1024;
 // Color scheme definitions
@@ -1836,7 +1838,11 @@ function SellerDashboardContent() {
                     }
                   ]}
                   activeOpacity={0.9}
-                  onPress={() => { setFullViewerIndex(currentMediaIndex); setFullViewerVisible(true); }}
+                  onPress={() => { 
+                    setFullViewerMediaUrls(selectedProductDetail.media_urls || []);
+                    setFullViewerIndex(currentMediaIndex); 
+                    setFullViewerVisible(true); 
+                  }}
                 >
                   {/* Video for display */}
                   <ResponsiveVideo
@@ -1896,7 +1902,11 @@ function SellerDashboardContent() {
               ) : (
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={() => { setFullViewerIndex(currentMediaIndex); setFullViewerVisible(true); }}
+                  onPress={() => { 
+                    setFullViewerMediaUrls(selectedProductDetail.media_urls || []);
+                    setFullViewerIndex(currentMediaIndex); 
+                    setFullViewerVisible(true); 
+                  }}
                   style={isLargeScreen ? { width: mediaWidth, height: mediaHeight } : { width: '100%', height: 350 }}
                 >
                   <Image
@@ -2266,6 +2276,9 @@ function SellerDashboardContent() {
     const themeColors = colorScheme === 'dark' ? darkColors : lightColors;
     const [products, setProducts] = useState<any[]>([]);
     const [loadingList, setLoadingList] = useState(true);
+    const [viewMode, setViewMode] = useState<'grid' | 'feed'>('grid'); // Toggle between grid and full-screen feed
+    const videoRefs = useRef<{ [key: string]: any }>({});
+    const [currentlyPlayingId, setCurrentlyPlayingId] = useState<string | null>(null);
 
     const loadProducts = useCallback(async () => {
       if (!sellerId) return;
@@ -2284,6 +2297,43 @@ function SellerDashboardContent() {
     useEffect(() => { loadProducts(); }, [loadProducts, refreshTrigger]);
     useFocusEffect(useCallback(() => { loadProducts(); }, [loadProducts]));
 
+    // Video feed viewability handler
+    const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+      if (!viewableItems.length || viewMode !== 'feed') return;
+     
+      // Pause all videos first
+      Object.values(videoRefs.current).forEach(v => {
+        if (v && typeof v.pauseAsync === 'function') {
+          v.pauseAsync();
+        }
+      });
+     
+      const visibleItem = viewableItems[0]?.item;
+      const isVideoItem = visibleItem?.media_urls?.[0]?.includes('.mp4');
+      
+      if (isVideoItem && videoRefs.current[visibleItem.id]) {
+        try {
+          // Restart video from beginning when returning to it
+          const videoRef = videoRefs.current[visibleItem.id];
+          videoRef.setPositionAsync(0).then(() => {
+            videoRef.playAsync();
+          }).catch(() => {
+            videoRef.playAsync();
+          });
+          setCurrentlyPlayingId(visibleItem.id);
+        } catch (error) {
+          console.error('Error playing video:', error);
+        }
+      } else {
+        setCurrentlyPlayingId(null);
+      }
+    }).current;
+
+    const viewabilityConfig = useRef({
+      itemVisiblePercentThreshold: 70,
+      minimumViewTime: 300,
+    }).current;
+
     if (loadingList) return <View style={{ padding: 50, alignItems: 'center' }}><ActivityIndicator size="large" color={themeColors.primary} /></View>;
 
     if (products.length === 0) return (
@@ -2293,6 +2343,9 @@ function SellerDashboardContent() {
         <Text style={{ color: themeColors.textTertiary, marginTop: 8 }}>Tap "+ Add Product" to start selling!</Text>
       </View>
     );
+
+    // Check if there are video products
+    const hasVideos = products.some(p => p.media_urls?.[0]?.includes('.mp4'));
 
     const renderProductItem = ({ item }: { item: any }) => {
       // FIX: Find first non-video image, or use video if all media are videos
@@ -2410,7 +2463,227 @@ function SellerDashboardContent() {
       );
     };
 
-    return <FlatList data={products} renderItem={renderProductItem} keyExtractor={(item) => item.id} contentContainerStyle={styles.productsListContainer} showsVerticalScrollIndicator={false} />;
+    // Full-screen video feed item renderer (like home page)
+    const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
+      const isVideoItem = item.media_urls?.[0]?.includes('.mp4');
+      const [isPlaying, setIsPlaying] = useState(currentlyPlayingId === item.id);
+      const [isBuffering, setIsBuffering] = useState(false);
+      const localVideoRef = useRef<any>(null);
+
+      // Update playing state when currentlyPlayingId changes
+      useEffect(() => {
+        setIsPlaying(currentlyPlayingId === item.id);
+      }, [currentlyPlayingId, item.id]);
+
+      // Prepare video URI with proper formatting
+      const videoUri = item.media_urls?.[0] 
+        ? (item.media_urls[0].startsWith('http') 
+            ? item.media_urls[0] 
+            : `${SUPABASE_URL}/storage/v1/object/public/products/${item.media_urls[0]}`)
+        : null;
+
+      return (
+        <View style={{ height, width, backgroundColor: themeColors.background }}>
+          <TouchableOpacity 
+            activeOpacity={1} 
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+            onPress={async () => {
+              if (!isVideoItem) return;
+              try {
+                if (localVideoRef.current && typeof localVideoRef.current.getStatusAsync === 'function') {
+                  const status: any = await localVideoRef.current.getStatusAsync();
+                  if (status.isPlaying) {
+                    await localVideoRef.current.pauseAsync();
+                    setIsPlaying(false);
+                  } else {
+                    await localVideoRef.current.playAsync();
+                    setIsPlaying(true);
+                  }
+                }
+              } catch (e) {
+                // ignore
+              }
+            }}
+          >
+            {isVideoItem ? (
+              <View style={{ flex: 1, backgroundColor: '#000', width: '100%' }}>
+                <View style={{ width: '100%', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  {videoUri && (
+                    <Video
+                      source={{ uri: videoUri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping
+                      shouldPlay={isPlaying}
+                      useNativeControls={false}
+                      ref={(ref: any) => { 
+                        localVideoRef.current = ref; 
+                        if (ref) videoRefs.current[item.id] = ref;
+                        else delete videoRefs.current[item.id];
+                      }}
+                      onPlaybackStatusUpdate={(status: any) => {
+                        setIsBuffering(!!status.isBuffering);
+                        setIsPlaying(!!status.isPlaying);
+                      }}
+                      progressUpdateIntervalMillis={500}
+                    />
+                  )}
+
+                  {isBuffering && (
+                    <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+                      <ActivityIndicator size="large" color={themeColors.primary} />
+                    </View>
+                  )}
+
+                  {!isPlaying && !isBuffering && (
+                    <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} pointerEvents="none">
+                      <View style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 40,
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}>
+                        <Ionicons name="play" size={34} color={themeColors.primary} />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ) : (
+              <Image
+                source={{ uri: item.media_urls?.[0] || 'https://via.placeholder.com/400' }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="contain"
+              />
+            )}
+          </TouchableOpacity>
+
+          {/* Product Info Overlay */}
+          <View style={{
+            position: 'absolute',
+            bottom: 20,
+            left: 20,
+            right: 20,
+            backgroundColor: `${themeColors.background}E6`,
+            borderRadius: 16,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: themeColors.border,
+          }}>
+            <Text style={{ color: themeColors.text, fontSize: 18, fontWeight: 'bold' }} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+              <Text style={{ color: themeColors.text, fontSize: 20, fontWeight: 'bold' }}>
+                GHS {item.price}
+              </Text>
+              {item.original_price && item.original_price > item.price && (
+                <>
+                  <Text style={{ color: themeColors.textTertiary, fontSize: 14, marginLeft: 8, textDecorationLine: 'line-through' }}>
+                    GHS {item.original_price}
+                  </Text>
+                  <View style={{ backgroundColor: themeColors.error, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginLeft: 8 }}>
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
+                      -{Math.round(((item.original_price - item.price) / item.original_price) * 100)}%
+                    </Text>
+                  </View>
+                </>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={{
+                marginTop: 12,
+                backgroundColor: themeColors.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onPress={() => { setSelectedProductDetail(item); setCurrentMediaIndex(0); setProductDetailModal(true); }}
+            >
+              <Ionicons name="eye" size={16} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>View Details</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* View Mode Toggle Button */}
+          <TouchableOpacity
+            style={{
+              position: 'absolute',
+              top: 60,
+              right: 20,
+              backgroundColor: `${themeColors.background}CC`,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: themeColors.border,
+            }}
+            onPress={() => setViewMode('grid')}
+          >
+            <Ionicons name="grid-outline" size={20} color={themeColors.text} />
+            <Text style={{ color: themeColors.text, marginLeft: 6, fontSize: 12 }}>Grid</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    };
+
+    return (
+      <>
+        {/* View mode toggle for grid view */}
+        {hasVideos && viewMode === 'grid' && (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingVertical: 8 }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: themeColors.primary + '15',
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 20,
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: themeColors.primary,
+              }}
+              onPress={() => setViewMode('feed')}
+            >
+              <Ionicons name="play-circle-outline" size={20} color={themeColors.primary} />
+              <Text style={{ color: themeColors.primary, marginLeft: 6, fontSize: 12, fontWeight: '600' }}>Video Feed</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {viewMode === 'grid' ? (
+          <FlatList 
+            data={products} 
+            renderItem={renderProductItem} 
+            keyExtractor={(item) => item.id} 
+            contentContainerStyle={styles.productsListContainer} 
+            showsVerticalScrollIndicator={false} 
+          />
+        ) : (
+          <FlatList
+            data={products}
+            renderItem={renderFeedItem}
+            keyExtractor={item => item.id}
+            pagingEnabled
+            snapToAlignment="start"
+            snapToInterval={height}
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            getItemLayout={(_, index) => ({ length: height, offset: height * index, index })}
+            style={{ flex: 1 }}
+          />
+        )}
+      </>
+    );
   });
 
   ProductsList.displayName = 'ProductsList';
@@ -3963,91 +4236,19 @@ const FullImageViewer: React.FC<{
   initialIndex: number;
 }> = ({ isVisible, onClose, mediaUrls, initialIndex }) => {
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [isVideoMuted, setIsVideoMuted] = useState(false);
-  const videoRefs = useRef<{ [key: number]: any }>({});
   const listRef = useRef<FlatList<any> | null>(null);
-  const controlsTimeoutRef = useRef<any>(null);
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
 
   useEffect(() => {
     if (isVisible && initialIndex >= 0 && initialIndex < (mediaUrls || []).length) {
       setCurrentIndex(initialIndex);
-      setIsVideoPlaying(false);
-      setShowControls(true);
       setTimeout(() => {
         listRef.current?.scrollToIndex({ index: initialIndex, animated: false });
-        // Auto-play after a short delay to allow video to load
-        setTimeout(() => {
-          setIsVideoPlaying(true);
-        }, 500);
       }, 50);
     }
   }, [isVisible, initialIndex, mediaUrls]);
 
-  useEffect(() => {
-    return () => {
-      Object.values(videoRefs.current).forEach(video => {
-        if (video && typeof video.unloadAsync === 'function') {
-          video.unloadAsync();
-        }
-      });
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const hideControlsAfterDelay = () => {
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    controlsTimeoutRef.current = setTimeout(() => {
-      setShowControls(false);
-    }, 2000);
-  };
-
-  const toggleControls = () => {
-    setShowControls(prev => !prev);
-    if (!showControls) hideControlsAfterDelay();
-  };
-
-  const handlePlayPause = async () => {
-    const currentVideoRef = videoRefs.current[currentIndex];
-    if (currentVideoRef) {
-      if (isVideoPlaying) {
-        await currentVideoRef.pauseAsync();
-        setIsVideoPlaying(false);
-      } else {
-        await currentVideoRef.playAsync();
-        setIsVideoPlaying(true);
-      }
-      setShowControls(true);
-      hideControlsAfterDelay();
-    }
-  };
-
-  const handleToggleMute = () => {
-    setIsVideoMuted(!isVideoMuted);
-    setShowControls(true);
-    hideControlsAfterDelay();
-  };
-
-  const handleScreenTap = () => {
-    const currentUrl = mediaUrls[currentIndex];
-    if (currentUrl && currentUrl.toLowerCase().includes('.mp4')) {
-      handlePlayPause();
-    } else {
-      toggleControls();
-    }
-  };
-
-  const { width: winWidth } = useWindowDimensions();
-
   if (!isVisible || !mediaUrls?.length) return null;
-
-  const currentUrl = mediaUrls[currentIndex];
-  const isCurrentVideo = currentUrl?.toLowerCase().includes('.mp4');
 
   return (
     <Modal animationType="fade" transparent={true} visible={isVisible} onRequestClose={onClose}>
@@ -4063,54 +4264,53 @@ const FullImageViewer: React.FC<{
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          decelerationRate="fast"
           keyExtractor={(_, i) => i.toString()}
           getItemLayout={(_, i) => ({ length: winWidth, offset: winWidth * i, index: i })}
-          onMomentumScrollEnd={(e) => {
-            const newIndex = Math.round(e.nativeEvent.contentOffset.x / winWidth);
-            setCurrentIndex(newIndex);
-            setIsVideoPlaying(true);
-            setShowControls(true);
-          }}
+          onMomentumScrollEnd={(e) => setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / winWidth))}
           renderItem={({ item: url, index }) => {
-            const isVideo = url?.toLowerCase().includes('.mp4');
+            const isVideo = url.toLowerCase().includes('.mp4');
+            const videoUri = url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
+            const containerMaxWidth = Math.min(winWidth * 0.95, 1200);
+            const containerMaxHeight = Math.min(winHeight * 0.95, 1200);
+            const isDesktop = winWidth >= 1024;
+            
             return (
-              <TouchableOpacity style={[viewerStyles.fullViewerMediaSlide, { width: winWidth, alignSelf: 'center' }]} activeOpacity={1} onPress={handleScreenTap}>
-                {isVideo ? (
-                  <View style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
-                    <ResponsiveVideo
-                      uri={url}
-                      autoPlay={currentIndex === index && isVideoPlaying}
-                      controls={false}
-                      muted={isVideoMuted}
-                      onRef={(ref) => { videoRefs.current[index] = ref; }}
-                      onStatus={(status: any) => setIsVideoPlaying(!!status?.isPlaying)}
-                      containerStyle={{
-                        width: '100%',
-                        maxWidth: 1200,
-                        alignSelf: 'center',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        borderRadius: 16,
-                        backgroundColor: '#000',
-                      }}
+              <View style={[viewerStyles.fullViewerMediaSlide, { 
+                backgroundColor: '#000', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                paddingHorizontal: isDesktop ? 40 : 0,
+              }]}>
+                <View style={{ 
+                  width: containerMaxWidth, 
+                  height: containerMaxHeight, 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  alignSelf: 'center',
+                }}>
+                  {isVideo ? (
+                    <Video
+                      source={{ uri: videoUri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping
+                      shouldPlay={currentIndex === index}
+                      useNativeControls
                     />
-                    {showControls && (
-                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent', zIndex: 5 }} pointerEvents="box-none">
-                        <TouchableOpacity onPress={handlePlayPause} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 30 }}>
-                          <Ionicons name={isVideoPlaying ? 'pause' : 'play'} size={40} color="#fff" />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                ) : (
-                  <Image source={{ uri: url || 'https://via.placeholder.com/600' }} style={viewerStyles.fullViewerMediaImage} resizeMode="contain" />
-                )}
-              </TouchableOpacity>
+                  ) : (
+                    <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                  )}
+                </View>
+              </View>
             );
           }}
         />
+        
+        {mediaUrls.length > 1 && (
+          <Text style={viewerStyles.fullViewerPaginationText}>
+            {currentIndex + 1} / {mediaUrls.length}
+          </Text>
+        )}
       </View>
     </Modal>
   );
@@ -4143,6 +4343,18 @@ const viewerStyles = StyleSheet.create({
   fullViewerMediaImage: {
     width: '100%',
     height: '100%'
+  },
+  fullViewerPaginationText: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    color: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
