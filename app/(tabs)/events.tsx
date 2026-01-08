@@ -246,7 +246,7 @@ const PLATFORMS: OnlinePlatform[] = ['Zoom', 'Google Meet', 'Microsoft Teams', '
   'Educational': ['#38B2AC', '#81E6D9'],
   'Political': ['#ED8936', '#FBD38D'],
   'Religious': ['#4299E1', '#90CDF4'],
-  'All': ['#718096', '#A0AEC0'],
+  'All': ['#b36e06ff', '#df7905ff'],
 }; */
 
 /* ---------------- HELPER: Convert 12h to 24h minutes ---------------- */
@@ -4215,12 +4215,22 @@ export default function EventsScreen() {
           {['All', ...CATEGORIES].map(cat => (
             <TouchableOpacity
               key={cat}
-              onPress={() => setActiveCategory(cat as EventCategory)}
-              style={[styles.categoryChip, activeCategory === cat && styles.activeCategory, 
-                { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setActiveCategory(cat as EventCategory | 'All')}
+              style={[
+                styles.categoryChip,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                activeCategory === cat && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
             >
-              <Text style={[styles.categoryText, activeCategory === cat && styles.activeCategoryText, 
-                { color: activeCategory === cat ? '#ffffff' : colors.textSecondary }]}>{cat}</Text>
+              <Text
+                style={[
+                  styles.categoryText,
+                  { color: colors.textSecondary },
+                  activeCategory === cat && { color: '#ffffff', fontWeight: '700' },
+                ]}
+              >
+                {cat}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
