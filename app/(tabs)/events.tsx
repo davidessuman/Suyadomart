@@ -6,7 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   SafeAreaView,
-  // Dimensions, // Unused
+  Dimensions,
   ScrollView,
   StatusBar,
   Modal,
@@ -19,12 +19,15 @@ import {
   Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as ExpoCalendar from 'expo-calendar';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
-// const { width, height } = Dimensions.get('window'); // Unused
+// Get screen dimensions for responsive design
+const getScreenDimensions = () => Dimensions.get('window');
 
 /* ---------------- THEME SYSTEM WITH DARK/LIGHT MODE - UNIFIED WITH HOME & SEARCH PAGES ---------------- */
 const LIGHT_COLORS = {
@@ -1581,6 +1584,15 @@ export default function EventsScreen() {
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
 
+  // Screen dimensions for responsive design
+  const [screenDimensions, setScreenDimensions] = useState(Dimensions.get('window'));
+  const screenWidth = screenDimensions.width;
+  
+  // Responsive breakpoints
+  const isMobile = screenWidth < 768;
+  const isTablet = screenWidth >= 768 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+
 
   // Alert state
   const [alertState, setAlertState] = useState<AlertState>({
@@ -1638,11 +1650,18 @@ export default function EventsScreen() {
   const [showFlyerFullView, setShowFlyerFullView] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showFullScreenMessageEditor, setShowFullScreenMessageEditor] = useState(false);
   const [selectedDates, setSelectedDates] = useState<string[]>([getTodayUTC()]);
   const [dayDetails, setDayDetails] = useState<Record<string, DayDetails>>({});
   const [showDayEditor, setShowDayEditor] = useState(false);
   const [editingDayIndex, setEditingDayIndex] = useState(0);
   const [editingDayDate, setEditingDayDate] = useState('');
+
+  // Animated values for loading screen
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const dotsAnim1 = useRef(new Animated.Value(0)).current;
+  const dotsAnim2 = useRef(new Animated.Value(0)).current;
+  const dotsAnim3 = useRef(new Animated.Value(0)).current;
 
   const [formData, setFormData] = useState({
     title: '',
@@ -1880,6 +1899,51 @@ export default function EventsScreen() {
     fetchUserUniversity();
   }, []);
 
+  // Animated loading screen effects
+  useEffect(() => {
+    if (isLoading) {
+      // Pulsing ring animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
+      // Animated dots sequence
+      const animateDot = (anim: Animated.Value, delay: number) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+            Animated.delay(600),
+          ])
+        );
+      };
+
+      animateDot(dotsAnim1, 0).start();
+      animateDot(dotsAnim2, 200).start();
+      animateDot(dotsAnim3, 400).start();
+    }
+  }, [isLoading, pulseAnim, dotsAnim1, dotsAnim2, dotsAnim3]);
+
   // Fetch events from Supabase
   useEffect(() => {
     if (userUniversity) {
@@ -1892,6 +1956,15 @@ export default function EventsScreen() {
   useEffect(() => {
     setBannerIndex(0);
   }, [events]);
+
+  // Listen for dimension changes (screen rotation, window resize)
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenDimensions(window);
+    });
+
+    return () => subscription?.remove();
+  }, []);
 
   const fetchUserUniversity = async () => {
     try {
@@ -1919,6 +1992,13 @@ export default function EventsScreen() {
     if (!userUniversity) return;
 
     setIsLoading(true);
+    const startTime = Date.now();
+    
+    // Force loading to end after 7 seconds maximum
+    const maxLoadingTimeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 7000);
+    
     try {
       const { data, error } = await supabase
         .from('events')
@@ -1954,7 +2034,14 @@ export default function EventsScreen() {
       console.error('Error fetching events:', error);
       showAlert('Error', 'Unable to load events');
     } finally {
-      setIsLoading(false);
+      // Ensure loading screen shows for at least 5 seconds but no more than 7
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, Math.min(5000 - elapsedTime, 7000 - elapsedTime));
+      
+      setTimeout(() => {
+        clearTimeout(maxLoadingTimeout);
+        setIsLoading(false);
+      }, remainingTime);
     }
   };
 
@@ -2234,6 +2321,410 @@ export default function EventsScreen() {
     setIsModalVisible(true);
   };
 
+  // Build Date objects from event date and time strings
+  const buildDateFromStrings = (dateStr: string, timeStr?: string) => {
+    const base = new Date(dateStr + 'T00:00:00');
+    if (!timeStr) return base;
+    const parts = timeStr.split(' ');
+    const timePart = parts[0];
+    const period = parts[1];
+    const [hStr, mStr] = timePart.split(':');
+    let hours = parseInt(hStr || '0', 10);
+    const minutes = parseInt(mStr || '0', 10);
+    if (period === 'AM' || period === 'PM') {
+      hours = hours % 12;
+      if (period === 'PM') hours += 12;
+    }
+    base.setHours(hours, minutes, 0, 0);
+    return base;
+  };
+
+  const handleSetReminder = async (event: EventItem) => {
+    try {
+      if (Platform.OS === 'web') {
+        const start = buildDateFromStrings(event.date, event.startTime);
+        let end = buildDateFromStrings(event.date, event.endTime);
+        if (end.getTime() <= start.getTime()) {
+          end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+        }
+
+        const location = event.appearance === 'Virtual Meeting' ? (event.platform || event.link || '') : (event.venue || '');
+        const description = event.description || '';
+        const summary = (event.title || '').replace(/\r?\n/g, ' ');
+
+        if (typeof window !== 'undefined') {
+          const ua = window.navigator?.userAgent || '';
+          const isAndroid = /Android/i.test(ua);
+          const isIOS = /iPad|iPhone|iPod/i.test(ua);
+          const isMac = /Macintosh|Mac OS X/i.test(ua);
+          const isWindows = /Windows NT/i.test(ua);
+          const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
+          const isDesktop = !isMobile;
+
+          const fmt = (d: Date) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+          const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(summary)}&dates=${fmt(start)}/${fmt(end)}&location=${encodeURIComponent(location)}&details=${encodeURIComponent(description)}`;
+
+          // Mac desktop: open Apple Calendar
+          if (isMac && isDesktop) {
+            try {
+              const secondsSince2001 = start.getTime() / 1000 - 978307200;
+              const url = 'calshow:' + secondsSince2001;
+              window.location.href = url;
+              return;
+            } catch (err) {
+              console.warn('Mac Calendar failed, opening Google Calendar:', err);
+              showAlert(
+                'Calendar Not Available',
+                'Please install Google Calendar from the App Store to add reminders easily.',
+                [
+                  { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+                  { text: 'Cancel', style: 'cancel' }
+                ]
+              );
+              return;
+            }
+          }
+
+          // iOS mobile: open Apple Calendar
+          if (isIOS) {
+            try {
+              const secondsSince2001 = start.getTime() / 1000 - 978307200;
+              const url = 'calshow:' + secondsSince2001;
+              window.location.href = url;
+              return;
+            } catch (err) {
+              console.warn('iOS Calendar failed, suggesting Google Calendar:', err);
+              showAlert(
+                'Calendar Not Available',
+                'Please install Google Calendar from the App Store to add reminders easily.',
+                [
+                  { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+                  { text: 'Cancel', style: 'cancel' }
+                ]
+              );
+              return;
+            }
+          }
+
+          // Windows desktop: open Windows Calendar app
+          if (isWindows && isDesktop) {
+            try {
+              // Create ICS content for webcal protocol
+              const formatICSDate = (d: Date) => {
+                return new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+              };
+
+              const uid = uuidv4();
+              const dtstamp = formatICSDate(new Date());
+              const dtstart = formatICSDate(start);
+              const dtend = formatICSDate(end);
+              
+              const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Suyado Campus//EN',
+                'METHOD:PUBLISH',
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                `DTSTAMP:${dtstamp}`,
+                `DTSTART:${dtstart}`,
+                `DTEND:${dtend}`,
+                `SUMMARY:${summary}`,
+                location ? `LOCATION:${location}` : '',
+                description ? `DESCRIPTION:${description}` : '',
+                'STATUS:TENTATIVE',
+                'END:VEVENT',
+                'END:VCALENDAR',
+              ].filter(Boolean).join('\r\n');
+
+              // Create blob and webcal URL to open in Windows Calendar
+              const blob = new Blob([ics], { type: 'text/calendar' });
+              const blobUrl = URL.createObjectURL(blob);
+              const webcalUrl = blobUrl.replace('blob:', 'webcal:');
+              
+              // Try to open Windows Calendar
+              window.location.href = webcalUrl;
+              
+              // Clean up blob URL after delay
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+              
+              // Fallback after short delay if Calendar didn't open
+              setTimeout(() => {
+                showAlert(
+                  'Calendar App Required',
+                  'To easily add reminders, please install Google Calendar.',
+                  [
+                    { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+                    { text: 'Get Google Calendar', onPress: () => Linking.openURL('https://calendar.google.com/') },
+                    { text: 'Cancel', style: 'cancel' }
+                  ]
+                );
+              }, 1500);
+              return;
+            } catch (err) {
+              console.warn('Windows Calendar failed, suggesting Google Calendar:', err);
+              showAlert(
+                'Calendar App Required',
+                'To easily add reminders, please install Google Calendar.',
+                [
+                  { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+                  { text: 'Get Google Calendar', onPress: () => Linking.openURL('https://calendar.google.com/') },
+                  { text: 'Cancel', style: 'cancel' }
+                ]
+              );
+              return;
+            }
+          }
+
+          // Android mobile: open native calendar app
+          if (isAndroid) {
+            try {
+              const baseInsert = `intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.item/event;S.title=${encodeURIComponent(summary)};S.eventLocation=${encodeURIComponent(location)};S.description=${encodeURIComponent(description)};long.beginTime=${start.getTime()};long.endTime=${end.getTime()};end`;
+
+              // Prefer Samsung Calendar when device likely Samsung
+              const isSamsung = /Samsung|SM-|SAMSUNG/i.test(ua);
+              if (isSamsung) {
+                const samsungInsert = `intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.item/event;package=com.samsung.android.calendar;S.title=${encodeURIComponent(summary)};S.eventLocation=${encodeURIComponent(location)};S.description=${encodeURIComponent(description)};long.beginTime=${start.getTime()};long.endTime=${end.getTime()};end`;
+                try {
+                  window.location.href = samsungInsert;
+                  return;
+                } catch {}
+              }
+
+              window.location.href = baseInsert;
+              
+              // Fallback suggestion after delay
+              setTimeout(() => {
+                showAlert(
+                  'Calendar App Required',
+                  'Please install Google Calendar from the Play Store to add reminders easily.',
+                  [
+                    { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+                    { text: 'Get Google Calendar', onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.calendar') },
+                    { text: 'Cancel', style: 'cancel' }
+                  ]
+                );
+              }, 2000);
+              return;
+            } catch (err) {
+              console.warn('Android Calendar failed, suggesting Google Calendar:', err);
+              showAlert(
+                'Calendar App Required',
+                'Please install Google Calendar from the Play Store to add reminders easily.',
+                [
+                  { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+                  { text: 'Get Google Calendar', onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.calendar') },
+                  { text: 'Cancel', style: 'cancel' }
+                ]
+              );
+              return;
+            }
+          }
+
+          // Generic fallback: suggest Google Calendar
+          showAlert(
+            'Calendar App Required',
+            'Please install Google Calendar to add reminders easily.',
+            [
+              { text: 'Open Web Calendar', onPress: () => Linking.openURL(gcUrl) },
+              { text: 'Get Google Calendar', onPress: () => Linking.openURL('https://calendar.google.com/') },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        }
+        return;
+      }
+
+      const start = buildDateFromStrings(event.date, event.startTime);
+      let end = buildDateFromStrings(event.date, event.endTime);
+      if (end.getTime() <= start.getTime()) {
+        end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+      }
+
+      const location = event.appearance === 'Virtual Meeting' ? (event.platform || event.link || '') : (event.venue || '');
+      const description = event.description || '';
+
+      if (Platform.OS === 'android') {
+        try {
+          await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
+            data: 'content://com.android.calendar/events',
+            extra: {
+              title: event.title,
+              eventLocation: location,
+              description,
+              beginTime: start.getTime(),
+              endTime: end.getTime(),
+            },
+          });
+          return;
+        } catch (e) {
+          // Fallback below if intent fails
+          console.warn('Calendar insert intent failed, falling back to direct create:', e);
+        }
+      }
+
+      // iOS (and Android fallback): create the event directly using Expo Calendar
+      const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission Required', 'Please allow calendar access to add this reminder.');
+        return;
+      }
+
+      let calendarId: string | undefined;
+      try {
+        const defaultCal = await ExpoCalendar.getDefaultCalendarAsync();
+        calendarId = defaultCal?.id;
+      } catch {}
+      if (!calendarId) {
+        const cals = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
+        calendarId = cals?.[0]?.id;
+      }
+      if (!calendarId) {
+        showAlert('Error', 'Could not find a calendar to add the event.');
+        return;
+      }
+
+      await ExpoCalendar.createEventAsync(calendarId, {
+        title: event.title,
+        startDate: start,
+        endDate: end,
+        location,
+        notes: description,
+        timeZone: undefined,
+      });
+
+      if (Platform.OS === 'ios') {
+        // Open the Calendar app to the event date
+        const secondsSince2001 = start.getTime() / 1000 - 978307200;
+        try { await Linking.openURL('calshow:' + secondsSince2001); } catch {}
+      }
+      showAlert('Success', 'Reminder added to your calendar.');
+    } catch (error) {
+      console.error('Error setting reminder:', error);
+      showAlert('Error', 'Failed to add reminder to calendar.');
+    }
+  };
+
+  // Helper function to get dynamic background based on category
+  const getCategoryBackground = (category: string, index: number = 0) => {
+    const backgrounds: Record<string, { gradient: string[], pattern: string, bgImages: string[] }> = {
+      'General': {
+        gradient: ['rgba(255,107,53,0.50)', 'rgba(255,53,160,0.50)'],
+        pattern: '🎯',
+        bgImages: [
+          'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80',
+          'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80',
+          'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800&q=80'
+        ]
+      },
+      'Entertainment': {
+        gradient: ['rgba(156,39,176,0.50)', 'rgba(233,30,99,0.50)'],
+        pattern: '🎭',
+        bgImages: [
+          'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
+          'https://images.unsplash.com/photo-1501612780327-45045538702b?w=800&q=80',
+          'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&q=80'
+        ]
+      },
+      'Educational': {
+        gradient: ['rgba(33,150,243,0.50)', 'rgba(3,169,244,0.50)'],
+        pattern: '📚',
+        bgImages: [
+          'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&q=80',
+          'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800&q=80',
+          'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&q=80'
+        ]
+      },
+      'Political': {
+        gradient: ['rgba(255,152,0,0.50)', 'rgba(255,193,7,0.50)'],
+        pattern: '🗳️',
+        bgImages: [
+          'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=800&q=80',
+          'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&q=80',
+          'https://images.unsplash.com/photo-1503428593586-e225b39bddfe?w=800&q=80'
+        ]
+      },
+      'Religious': {
+        gradient: ['rgba(76,175,80,0.50)', 'rgba(139,195,74,0.50)'],
+        pattern: '🕊️',
+        bgImages: [
+          'https://images.unsplash.com/photo-1438232992991-995b7058bbb3?w=800&q=80',
+          'https://images.unsplash.com/photo-1507692049790-de58290a4334?w=800&q=80',
+          'https://images.unsplash.com/photo-1464207687429-7505649dae38?w=800&q=80'
+        ]
+      },
+      'Academic': {
+        gradient: ['rgba(63,81,181,0.50)', 'rgba(103,58,183,0.50)'],
+        pattern: '🎓',
+        bgImages: [
+          'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80',
+          'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?w=800&q=80',
+          'https://images.unsplash.com/photo-1562774053-701939374585?w=800&q=80'
+        ]
+      },
+      'Social': {
+        gradient: ['rgba(244,67,54,0.50)', 'rgba(233,30,99,0.50)'],
+        pattern: '👥',
+        bgImages: [
+          'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&q=80',
+          'https://images.unsplash.com/photo-1543269865-cbf427effbad?w=800&q=80',
+          'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&q=80'
+        ]
+      },
+      'Sports': {
+        gradient: ['rgba(0,188,212,0.50)', 'rgba(0,150,136,0.50)'],
+        pattern: '⚽',
+        bgImages: [
+          'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80',
+          'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&q=80',
+          'https://images.unsplash.com/photo-1517649763962-0c623066013b?w=800&q=80'
+        ]
+      },
+      'Culture': {
+        gradient: ['rgba(255,235,59,0.50)', 'rgba(255,193,7,0.50)'],
+        pattern: '🎨',
+        bgImages: [
+          'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=800&q=80',
+          'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800&q=80',
+          'https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=800&q=80'
+        ]
+      },
+      'Career': {
+        gradient: ['rgba(96,125,139,0.50)', 'rgba(69,90,100,0.50)'],
+        pattern: '💼',
+        bgImages: [
+          'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&q=80',
+          'https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80',
+          'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&q=80'
+        ]
+      },
+    };
+    const categoryData = backgrounds[category] || backgrounds['General'];
+    const bgImage = categoryData.bgImages[index % categoryData.bgImages.length];
+    return { ...categoryData, bgImage };
+  };
+
+  // Helper function to get event status based on time
+  const getEventStatus = (event: EventItem) => {
+    if (!event.startTime || !event.endTime) return 'HAPPENING TODAY';
+    
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = timeToMinutes(event.startTime);
+    const endMinutes = timeToMinutes(event.endTime);
+    
+    // Handle events that span past midnight
+    const adjustedEndMinutes = endMinutes < startMinutes ? endMinutes + 24 * 60 : endMinutes;
+    
+    if (currentMinutes < startMinutes) {
+      return 'HAPPENING TODAY';
+    } else if (currentMinutes >= startMinutes && currentMinutes <= adjustedEndMinutes) {
+      return 'HAPPENING NOW';
+    } else {
+      return 'EVENT COMPLETED';
+    }
+  };
+
   const pickFlyer = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -2448,8 +2939,88 @@ export default function EventsScreen() {
       });
     }
     
+    // Apply date filter to announcements
+    if (activeFilter !== 'All') {
+      result = result.filter(announcement => {
+        if (!announcement.has_date_time || !announcement.announcement_dates) return false;
+        
+        try {
+          const dates = JSON.parse(announcement.announcement_dates);
+          if (!Array.isArray(dates) || dates.length === 0) return false;
+          
+          const announcementDate = new Date(dates[0]);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          announcementDate.setHours(0, 0, 0, 0);
+          
+          switch (activeFilter) {
+            case 'Today':
+              return announcementDate.toDateString() === today.toDateString();
+            case 'Tomorrow': {
+              const tomorrow = new Date(today);
+              tomorrow.setDate(today.getDate() + 1);
+              return announcementDate.toDateString() === tomorrow.toDateString();
+            }
+            case 'This Week': {
+              const dayOfWeek = today.getDay();
+              const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+              const weekStart = new Date(today);
+              weekStart.setDate(today.getDate() + diffToMonday);
+              weekStart.setHours(0, 0, 0, 0);
+              
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekStart.getDate() + 6);
+              weekEnd.setHours(23, 59, 59, 999);
+              
+              return announcementDate >= weekStart && announcementDate <= weekEnd;
+            }
+            case 'This Month': {
+              const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+              const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+              monthEnd.setHours(23, 59, 59, 999);
+              
+              return announcementDate >= monthStart && announcementDate <= monthEnd;
+            }
+            case 'Next Month': {
+              const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+              const nextMonthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+              nextMonthEnd.setHours(23, 59, 59, 999);
+              
+              return announcementDate >= nextMonthStart && announcementDate <= nextMonthEnd;
+            }
+            default:
+              if (activeFilter.startsWith('Specific Day:')) {
+                const dateMatch = activeFilter.match(/\d{4}-\d{2}-\d{2}/);
+                if (dateMatch) {
+                  return announcementDate.toDateString() === new Date(dateMatch[0]).toDateString();
+                }
+              } else if (activeFilter.startsWith('Selected Days:')) {
+                return dates.some((date: string) => filterSelectedDays.includes(date));
+              }
+              return true;
+          }
+        } catch (error) {
+          console.error('Error filtering announcement dates:', error);
+          return false;
+        }
+      });
+    }
+    
+    // Apply time filter to announcements
+    if (filterTimeRange && filterTimeRange.startTime && filterTimeRange.endTime) {
+      result = result.filter(announcement => {
+        if (!announcement.from_time) return false;
+        
+        const announcementStartMinutes = timeToMinutes(announcement.from_time);
+        const filterStartMinutes = timeToMinutes(filterTimeRange.startTime);
+        const filterEndMinutes = timeToMinutes(filterTimeRange.endTime);
+        
+        return announcementStartMinutes >= filterStartMinutes && announcementStartMinutes <= filterEndMinutes;
+      });
+    }
+    
     return result;
-  }, [activeCategory, allAnnouncements, isSearchActive, searchQuery]);
+  }, [activeCategory, allAnnouncements, isSearchActive, searchQuery, activeFilter, filterSelectedDays, filterTimeRange]);
 
   // Handle suggestion selection
   const handleSelectSuggestion = (suggestion: SearchSuggestion) => {
@@ -2931,7 +3502,7 @@ export default function EventsScreen() {
 
           <View style={styles.cardContent}>
             <View style={styles.tagRow}>
-              <View style={styles.categoryBadge}><Text style={styles.categoryBadgeText}>{item.category}</Text></View>
+              <View style={[styles.categoryBadge, { backgroundColor: '#2E8BC020' }]}><Text style={[styles.categoryBadgeText, { color: '#2E8BC0' }]}>{item.category}</Text></View>
               <View style={styles.appearanceBadge}><Text style={styles.appearanceBadgeText}>{item.appearance}</Text></View>
               {hasPerDayDesc && (
                 <View style={styles.multiDayBadge}><Text style={styles.multiDayBadgeText}>Multi-Day</Text></View>
@@ -2996,12 +3567,16 @@ export default function EventsScreen() {
     // Helper function for category colors
     const getCategoryColor = (category: string) => {
       const colorMap: Record<string, string> = {
-        'Academic': colors.primary,
-        'Social': '#FF6B6B',
-        'Sports': '#4ECDC4',
-        'Culture': '#FFD93D',
-        'Career': '#A8E6CF',
-        'General': colors.textSecondary,
+        'Academic': '#5B8FF9',
+        'Social': '#FF6B9D',
+        'Sports': '#00D9C0',
+        'Culture': '#FFB020',
+        'Career': '#6DC8BF',
+        'General': '#FF7A45',
+        'Entertainment': '#9E5CF2',
+        'Educational': '#2E8BC0',
+        'Political': '#FF8C42',
+        'Religious': '#52C41A',
       };
       return colorMap[category] || colors.primary;
     };
@@ -3143,7 +3718,91 @@ export default function EventsScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { color: colors.text }]}>Loading events...</Text>
+          {/* Modern Loading Animation */}
+          <View style={styles.loadingContent}>
+            {/* Animated Pulsing Rings */}
+            <View style={styles.loadingRingsContainer}>
+              <Animated.View 
+                style={[
+                  styles.loadingRing, 
+                  styles.loadingRingOuter,
+                  { 
+                    backgroundColor: colors.primary + '20',
+                    borderColor: colors.primary + '30',
+                    transform: [{ scale: pulseAnim }],
+                  }
+                ]} 
+              />
+              <Animated.View 
+                style={[
+                  styles.loadingRing, 
+                  styles.loadingRingMiddle,
+                  { 
+                    backgroundColor: colors.primary + '30',
+                    borderColor: colors.primary + '50',
+                    transform: [{ scale: Animated.multiply(pulseAnim, 1.05) }],
+                  }
+                ]} 
+              />
+              <Animated.View 
+                style={[
+                  styles.loadingRing, 
+                  styles.loadingRingInner,
+                  { 
+                    backgroundColor: colors.primary + '60',
+                    borderColor: colors.primary,
+                    transform: [{ scale: Animated.multiply(pulseAnim, 1.1) }],
+                  }
+                ]} 
+              />
+              {/* Center Icon */}
+              <View style={[styles.loadingIconContainer, { backgroundColor: colors.primary }]}>
+                <Text style={styles.loadingIcon}>📅</Text>
+              </View>
+            </View>
+            
+            {/* Loading Text with Professional Typography */}
+            <View style={styles.loadingTextContainer}>
+              <Text style={[styles.loadingTitle, { color: colors.text }]}>Loading Events</Text>
+              <Text style={[styles.loadingSubtitle, { color: colors.textSecondary }]}>
+                Fetching the latest campus activities...
+              </Text>
+            </View>
+
+            {/* Animated Loading Dots */}
+            <View style={styles.loadingDotsContainer}>
+              <Animated.View 
+                style={[
+                  styles.loadingDot, 
+                  { 
+                    backgroundColor: colors.primary,
+                    opacity: dotsAnim1,
+                    transform: [{ scale: dotsAnim1 }],
+                  }
+                ]} 
+              />
+              <Animated.View 
+                style={[
+                  styles.loadingDot, 
+                  { 
+                    backgroundColor: colors.primary,
+                    opacity: dotsAnim2,
+                    transform: [{ scale: dotsAnim2 }],
+                  }
+                ]} 
+              />
+              <Animated.View 
+                style={[
+                  styles.loadingDot, 
+                  { 
+                    backgroundColor: colors.primary,
+                    opacity: dotsAnim3,
+                    transform: [{ scale: dotsAnim3 }],
+                  }
+                ]} 
+              />
+            </View>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -3153,23 +3812,44 @@ export default function EventsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={colors.primary} />
 
-      <View style={[styles.headerRow, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <View>
-          <Text style={[styles.welcomeText, { color: colors.textSecondary }]}>Featured Today</Text>
-          
+      <View style={[
+        styles.headerRow, 
+        { 
+          backgroundColor: colors.card, 
+          borderBottomColor: colors.border,
+          flexDirection: isMobile ? 'column' : 'row',
+          padding: isMobile ? 12 : isTablet ? 14 : 16,
+          alignItems: isMobile ? 'stretch' : 'flex-start',
+        }
+      ]}>
+        <View style={{ flex: 1 }}>
           {/* Toggle Buttons */}
-          <View style={styles.feedToggleContainer}>
+          <View style={[
+            styles.feedToggleContainer,
+            {
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
+            }
+          ]}>
             <TouchableOpacity 
               style={[
                 styles.feedToggleButton, 
                 feedView === 'events' && styles.feedToggleButtonActive,
-                { backgroundColor: feedView === 'events' ? colors.primary : colors.card, borderColor: colors.border }
+                { 
+                  backgroundColor: feedView === 'events' ? colors.primary : colors.card, 
+                  borderColor: colors.border,
+                  paddingHorizontal: isMobile ? 16 : 20,
+                  paddingVertical: isMobile ? 7 : 8,
+                  minWidth: isMobile ? 90 : 100,
+                }
               ]}
               onPress={() => setFeedView('events')}
             >
               <Text style={[
                 styles.feedToggleText,
-                { color: feedView === 'events' ? '#FFFFFF' : colors.text }
+                { 
+                  color: feedView === 'events' ? '#FFFFFF' : colors.text,
+                  fontSize: isMobile ? 13 : 14,
+                }
               ]}>Events</Text>
             </TouchableOpacity>
             
@@ -3177,37 +3857,87 @@ export default function EventsScreen() {
               style={[
                 styles.feedToggleButton, 
                 feedView === 'announcements' && styles.feedToggleButtonActive,
-                { backgroundColor: feedView === 'announcements' ? colors.primary : colors.card, borderColor: colors.border }
+                { 
+                  backgroundColor: feedView === 'announcements' ? colors.primary : colors.card, 
+                  borderColor: colors.border,
+                  paddingHorizontal: isMobile ? 16 : 20,
+                  paddingVertical: isMobile ? 7 : 8,
+                  minWidth: isMobile ? 90 : 100,
+                }
               ]}
               onPress={() => setFeedView('announcements')}
             >
               <Text style={[
                 styles.feedToggleText,
-                { color: feedView === 'announcements' ? '#FFFFFF' : colors.text }
+                { 
+                  color: feedView === 'announcements' ? '#FFFFFF' : colors.text,
+                  fontSize: isMobile ? 13 : 14,
+                }
               ]}>Announcements</Text>
             </TouchableOpacity>
           </View>
           
           {userUniversity && (
-            <Text style={[styles.universityText, { color: colors.primary }]}>📍 {userUniversity}</Text>
+            <Text style={[
+              styles.universityText, 
+              { 
+                color: colors.primary,
+                fontSize: isMobile ? 13 : 14,
+              }
+            ]}>📍 {userUniversity}</Text>
           )}
         </View>
-        <View style={styles.headerButtons}>
+        <View style={[
+          styles.headerButtons,
+          {
+            marginTop: isMobile ? 12 : 0,
+            justifyContent: isMobile ? 'flex-end' : 'center',
+            alignSelf: isMobile ? 'stretch' : 'flex-start',
+          }
+        ]}>
           {/* Filter Button - Added on the left of Add Event Button */}
           <TouchableOpacity 
-            style={[styles.filterButton, { backgroundColor: colors.primaryLight, marginRight: 8 }]} 
+            style={[
+              styles.filterButton, 
+              { 
+                backgroundColor: '#E3F2FD', 
+                marginRight: 8,
+                paddingHorizontal: isMobile ? 14 : 16,
+                height: isMobile ? 36 : 40,
+                flex: isMobile ? 1 : 0,
+              }
+            ]} 
             onPress={() => setShowFilterModal(true)}
           >
-            <Text style={[styles.filterButtonText, { color: colors.primary }]}>Filter</Text>
+            <Text style={[
+              styles.filterButtonText, 
+              { 
+                color: '#2E8BC0',
+                fontSize: isMobile ? 13 : 14,
+              }
+            ]}>Filter</Text>
             {activeFilter !== 'All' && (
-              <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
+              <View style={[styles.filterBadge, { backgroundColor: '#2E8BC0' }]}>
                 <Text style={styles.filterBadgeText}>✓</Text>
               </View>
             )}
           </TouchableOpacity>
           
-          <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={() => setShowActionMenu(true)}>
-            <Text style={styles.addButtonText}>＋</Text>
+          <TouchableOpacity 
+            style={[
+              styles.addButton, 
+              { 
+                backgroundColor: colors.primary,
+                width: isMobile ? 36 : 40,
+                height: isMobile ? 36 : 40,
+              }
+            ]} 
+            onPress={() => setShowActionMenu(true)}
+          >
+            <Text style={[
+              styles.addButtonText,
+              { fontSize: isMobile ? 22 : 24 }
+            ]}>＋</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -3262,20 +3992,26 @@ export default function EventsScreen() {
           <View style={[
             styles.adBanner, 
             { 
-              backgroundColor: colors.primary,
+              backgroundColor: getCategoryBackground(todayEvents[bannerIndex]?.category || 'General', bannerIndex).gradient[0],
             }
           ]}>
-            {todayEvents[bannerIndex]?.flyer && todayEvents[bannerIndex].flyer.startsWith('https://') && (
-              <>
-                <Image source={{ uri: todayEvents[bannerIndex].flyer }} style={styles.adBgImage} blurRadius={14} />
-                <View style={styles.adBgOverlay} />
-              </>
-            )}
+            <Image 
+              source={{ uri: todayEvents[bannerIndex]?.flyer && todayEvents[bannerIndex].flyer.startsWith('https://') 
+                ? todayEvents[bannerIndex].flyer 
+                : getCategoryBackground(todayEvents[bannerIndex]?.category || 'General', bannerIndex).bgImage 
+              }} 
+              style={styles.adBgImage} 
+              blurRadius={8}
+            />
+            <View style={[styles.adBgOverlay, { 
+              background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)',
+              backgroundColor: 'rgba(0,0,0,0.6)',
+            }]} />
             <View style={styles.adContent}>
               <View style={styles.adTextSide}>
                 <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
                   <View style={styles.liveTag}><Text style={styles.liveTagText}>📅 EVENT</Text></View>
-                  <View style={styles.liveTag}><Text style={styles.liveTagText}>HAPPENING NOW</Text></View>
+                  <View style={styles.liveTag}><Text style={styles.liveTagText}>{getEventStatus(todayEvents[bannerIndex])}</Text></View>
                 </View>
                 <Text style={styles.adTitle} numberOfLines={2}>{todayEvents[bannerIndex]?.title || ''}</Text>
                 <Text style={styles.adLocation} numberOfLines={1}>
@@ -3318,20 +4054,35 @@ export default function EventsScreen() {
                 <View style={[
                   styles.adBanner, 
                   { 
-                    backgroundColor: colors.primary,
+                    backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
                   }
                 ]}>
-                  {event?.flyer && event.flyer.startsWith('https://') && (
+                  {event?.flyer && event.flyer.startsWith('https://') ? (
                     <>
                       <Image source={{ uri: event.flyer }} style={styles.adBgImage} blurRadius={14} />
-                      <View style={styles.adBgOverlay} />
+                      <View style={[styles.adBgOverlay, { 
+                        background: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)`,
+                        backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
+                      }]} />
+                    </>
+                  ) : (
+                    <>
+                      <View style={[styles.adBgOverlay, { 
+                        background: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)`,
+                        backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
+                      }]} />
+                      <View style={styles.adPatternOverlay}>
+                        <Text style={styles.adPatternText}>{getCategoryBackground(event?.category || 'General').pattern}</Text>
+                        <Text style={styles.adPatternText}>{getCategoryBackground(event?.category || 'General').pattern}</Text>
+                        <Text style={styles.adPatternText}>{getCategoryBackground(event?.category || 'General').pattern}</Text>
+                      </View>
                     </>
                   )}
                   <View style={styles.adContent}>
                     <View style={styles.adTextSide}>
                       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
                         <View style={styles.liveTag}><Text style={styles.liveTagText}>📅 EVENT</Text></View>
-                        <View style={styles.liveTag}><Text style={styles.liveTagText}>HAPPENING NOW</Text></View>
+                        <View style={styles.liveTag}><Text style={styles.liveTagText}>{getEventStatus(event)}</Text></View>
                       </View>
                       <Text style={styles.adTitle} numberOfLines={2}>{event?.title || ''}</Text>
                       <Text style={styles.adLocation} numberOfLines={1}>
@@ -3361,6 +4112,7 @@ export default function EventsScreen() {
           }
 
           const announcement = current.data;
+          const announcementIndex = announcement?.id ? announcement.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
           return (
             <TouchableOpacity 
               onPress={() => {
@@ -3371,15 +4123,41 @@ export default function EventsScreen() {
               <View style={[
                 styles.adBanner, 
                 { 
-                  backgroundColor: colors.info,
+                  backgroundColor: getCategoryBackground(announcement?.category || 'General', announcementIndex).gradient[0],
                 }
               ]}>
-                {announcement?.image_url && announcement.image_url.startsWith('https://') && (
-                  <>
-                    <Image source={{ uri: announcement.image_url }} style={styles.adBgImage} blurRadius={14} />
-                    <View style={styles.adBgOverlay} />
-                  </>
-                )}
+                <Image 
+                  source={{ uri: announcement?.image_url && announcement.image_url.startsWith('https://') 
+                    ? announcement.image_url 
+                    : getCategoryBackground(announcement?.category || 'General', announcementIndex).bgImage 
+                  }} 
+                  style={styles.adBgImage} 
+                  blurRadius={8}
+                />
+                <View style={[styles.adBgOverlay, { 
+                  background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)',
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                }]} />
+                <View style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+                  <View style={[styles.liveTag, { 
+                    backgroundColor: announcement?.priority === 'Urgent' ? colors.error : colors.success,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    elevation: 5,
+                  }]}>
+                    <Text style={[styles.liveTagText, { 
+                      color: '#ffffff',
+                      fontSize: 9,
+                      fontWeight: '900',
+                    }]}>
+                      {announcement?.priority || 'Not Urgent'}
+                    </Text>
+                  </View>
+                </View>
                 <View style={styles.adContent}>
                   <View style={styles.adTextSide}>
                     <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
@@ -3407,19 +4185,14 @@ export default function EventsScreen() {
                           })()}
                         </Text>
                       </View>
-                      <View style={[styles.liveTag, { backgroundColor: (announcement?.priority === 'Urgent' ? colors.error : colors.success) + '30' }]}>
-                        <Text style={[styles.liveTagText, { color: announcement?.priority === 'Urgent' ? colors.error : colors.success }]}>
-                          {announcement?.priority || 'Not Urgent'}
-                        </Text>
-                      </View>
                     </View>
                     <Text style={styles.adTitle} numberOfLines={2}>{announcement?.title || ''}</Text>
-                    <Text style={styles.adLocation} numberOfLines={1}>
+                    {announcement?.from_time && announcement?.to_time && (
+                      <Text style={[styles.adTime, { marginBottom: 2 }]}>🕒 {announcement.from_time} - {announcement.to_time}</Text>
+                    )}
+                    <Text style={[styles.adLocation, { marginTop: 2 }]} numberOfLines={1}>
                       👥 {announcement?.announced_for || 'All Students'}
                     </Text>
-                    {announcement?.from_time && announcement?.to_time && (
-                      <Text style={styles.adTime}>🕒 {announcement.from_time} - {announcement.to_time}</Text>
-                    )}
                   </View>
                   <View style={styles.adFlyerSide}>
                     <View style={styles.adFlyerCard}>
@@ -3507,7 +4280,7 @@ export default function EventsScreen() {
             >
               <Text style={styles.actionMenuButtonIcon}>📢</Text>
               <View>
-                <Text style={[styles.actionMenuButtonTitle, { color: colors.text }]}>Announcement</Text>
+                <Text style={[styles.actionMenuButtonTitle, { color: colors.text }]}>New Announcement</Text>
                 <Text style={[styles.actionMenuButtonSubtitle, { color: colors.textSecondary }]}>Post an important announcement</Text>
               </View>
             </TouchableOpacity>
@@ -3878,6 +4651,16 @@ export default function EventsScreen() {
                     <Text style={[styles.eventDetailsDescriptionText, { color: colors.text }]}>{selectedEvent.description}</Text>
                   </View>
                 )}
+
+                {/* Set Reminder Button - Available to all users */}
+                <View style={styles.eventDetailsActionButtons}>
+                  <TouchableOpacity
+                    style={[styles.eventDetailsActionButton, { backgroundColor: colors.primary }]}
+                    onPress={() => handleSetReminder(selectedEvent)}
+                  >
+                    <Text style={styles.eventDetailsActionButtonText}>⏰ Set Reminder</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* Action Buttons for Own Events - Only show if viewing own event */}
                 {isViewingOwnEvent && (
@@ -4725,16 +5508,14 @@ export default function EventsScreen() {
               </ScrollView>
 
               <Text style={[styles.inputLabel, { color: colors.text }]}>Message <Text style={{ color: colors.error }}>*</Text></Text>
-              <TextInput 
-                style={[styles.input, styles.textArea, { height: 180, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]} 
-                value={announcementData.message} 
-                onChangeText={txt => setAnnouncementData({ ...announcementData, message: txt })} 
-                placeholder="Enter your announcement message..." 
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={10}
-                textAlignVertical="top"
-              />
+              <TouchableOpacity 
+                style={[styles.input, styles.textArea, { height: 180, backgroundColor: colors.surface, borderColor: colors.border, justifyContent: 'flex-start', paddingTop: 12 }]}
+                onPress={() => setShowFullScreenMessageEditor(true)}
+              >
+                <Text style={[{ color: announcementData.message ? colors.text : colors.textSecondary }]}>
+                  {announcementData.message || 'Tap to enter your announcement message...'}
+                </Text>
+              </TouchableOpacity>
 
               <Text style={[styles.inputLabel, { color: colors.text }]}>Priority</Text>
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
@@ -5174,6 +5955,47 @@ export default function EventsScreen() {
           </SafeAreaView>
         </View>
       </Modal>
+
+      {/* FULL SCREEN MESSAGE EDITOR */}
+      <Modal visible={showFullScreenMessageEditor} animationType="slide" transparent={false}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{ flex: 1, backgroundColor: colors.background }}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
+              <TouchableOpacity onPress={() => setShowFullScreenMessageEditor(false)} style={{ padding: 8 }}>
+                <Text style={[{ color: colors.primary, fontSize: 16, fontWeight: '600' }]}>← Back</Text>
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: colors.text, flex: 1, textAlign: 'center' }]}>Announcement Message</Text>
+              <TouchableOpacity onPress={() => setShowFullScreenMessageEditor(false)} style={{ padding: 8 }}>
+                <Text style={[{ color: colors.primary, fontSize: 16, fontWeight: '600' }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flex: 1, padding: 16 }}>
+              <TextInput 
+                style={[{ 
+                  flex: 1,
+                  backgroundColor: colors.surface, 
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  color: colors.text,
+                  padding: 16,
+                  fontSize: 16,
+                  textAlignVertical: 'top'
+                }]} 
+                value={announcementData.message} 
+                onChangeText={txt => setAnnouncementData({ ...announcementData, message: txt })} 
+                placeholder="Enter your announcement message..." 
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                autoFocus
+              />
+              <Text style={[{ color: colors.textSecondary, fontSize: 12, marginTop: 8, textAlign: 'right' }]}>
+                {announcementData.message.length} characters
+              </Text>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -5181,9 +6003,87 @@ export default function EventsScreen() {
 /* ---------------- STYLES CREATOR ---------------- */
 const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  loadingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingRingsContainer: {
+    width: 140,
+    height: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  loadingRing: {
+    position: 'absolute',
+    borderRadius: 999,
+    borderWidth: 2,
+  },
+  loadingRingOuter: {
+    width: 140,
+    height: 140,
+    opacity: 0.3,
+  },
+  loadingRingMiddle: {
+    width: 100,
+    height: 100,
+    opacity: 0.5,
+  },
+  loadingRingInner: {
+    width: 60,
+    height: 60,
+    opacity: 0.8,
+  },
+  loadingIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  loadingIcon: {
+    fontSize: 24,
+  },
+  loadingTextContainer: {
+    marginTop: 32,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  loadingSubtitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  loadingDotsContainer: {
+    flexDirection: 'row',
+    marginTop: 24,
+    gap: 8,
+  },
+  loadingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   loadingText: { fontSize: 16, color: colors.text },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'flex-start', backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 14, alignItems: 'flex-start', backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerButtons: { flexDirection: 'row', alignItems: 'center' },
   welcomeText: { fontSize: 12, color: colors.textSecondary, fontWeight: '700', textTransform: 'uppercase' },
   header: { fontSize: 32, fontWeight: '900', color: colors.text },
@@ -5192,11 +6092,11 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   feedToggleButton: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, minWidth: 100, alignItems: 'center' },
   feedToggleButtonActive: { elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
   feedToggleText: { fontSize: 14, fontWeight: '600' },
-  addButton: { backgroundColor: colors.primary, width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  addButton: { backgroundColor: colors.primary, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   addButtonText: { color: '#ffffff', fontSize: 24 },
-  filterButton: { backgroundColor: colors.primaryLight, paddingHorizontal: 16, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', position: 'relative' },
-  filterButtonText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
-  filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.primary, width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  filterButton: { backgroundColor: '#E3F2FD', paddingHorizontal: 16, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', position: 'relative' },
+  filterButtonText: { color: '#2E8BC0', fontSize: 14, fontWeight: '600' },
+  filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#2E8BC0', width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   filterBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
   activeFilterContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 10, marginTop: 5, borderRadius: 10 },
   activeFilterText: { fontSize: 12, fontWeight: '600', color: colors.primary, flex: 1 },
@@ -5760,45 +6660,121 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   adBanner: { 
     marginHorizontal: 5, 
     marginTop: 5, 
-    height: 130, 
-    backgroundColor: colors.primary, 
+    minHeight: 130, 
     borderRadius: 20, 
     marginBottom: 5, 
     overflow: 'hidden',
-    position: 'relative'
+    position: 'relative',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   adBgImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  adBgOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)' },
-  adContent: { flex: 1, flexDirection: 'row', padding: 20, backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 16 },
+  adBgOverlay: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    right: 0, 
+    bottom: 0, 
+  },
+  adPatternOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    opacity: 0.15,
+  },
+  adPatternText: {
+    fontSize: 60,
+    transform: [{ rotate: '-15deg' }],
+  },
+  adContent: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    padding: 20, 
+    borderRadius: 16,
+  },
   adTextSide: { flex: 1.4 },
-  liveTag: { backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  liveTagText: { color: '#ffffff', fontSize: 9, fontWeight: '900', textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  adTitle: { color: '#ffffff', fontSize: 20, fontWeight: '900', textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  adLocation: { color: '#ffffff', opacity: 0.95, fontSize: 13, textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  adTime: { color: '#ffffff', opacity: 0.9, fontSize: 12, textShadowColor: '#000000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  liveTag: { 
+    backgroundColor: 'rgba(255,255,255,0.3)', 
+    alignSelf: 'flex-start', 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    backdropFilter: 'blur(10px)',
+  },
+  liveTagText: { 
+    color: '#ffffff', 
+    fontSize: 9, 
+    fontWeight: '900', 
+    textShadowColor: 'rgba(0,0,0,0.5)', 
+    textShadowOffset: { width: 0, height: 1 }, 
+    textShadowRadius: 3,
+    letterSpacing: 0.5,
+  },
+  adTitle: { 
+    color: '#ffffff', 
+    fontSize: 16, 
+    fontWeight: '900', 
+    textShadowColor: 'rgba(0,0,0,0.6)', 
+    textShadowOffset: { width: 0, height: 1 }, 
+    textShadowRadius: 4,
+    lineHeight: 20,
+    letterSpacing: 0.3,
+  },
+  adLocation: { 
+    color: '#ffffff', 
+    opacity: 0.95, 
+    fontSize: 13, 
+    textShadowColor: 'rgba(0,0,0,0.5)', 
+    textShadowOffset: { width: 0, height: 1 }, 
+    textShadowRadius: 3,
+  },
+  adTime: { 
+    color: '#ffffff', 
+    opacity: 0.9, 
+    fontSize: 12, 
+    textShadowColor: 'rgba(0,0,0,0.5)', 
+    textShadowOffset: { width: 0, height: 1 }, 
+    textShadowRadius: 3,
+  },
   adFlyerSide: { flex: 1, justifyContent: 'center' },
   adFlyerCard: { 
     width: '68%',
-    maxHeight: 110,
+    maxHeight: 85,
     aspectRatio: 3 / 4,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 14,
     padding: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    elevation: 5,
     overflow: 'hidden',
     alignSelf: 'flex-end',
     justifyContent: 'center',
     alignItems: 'center'
   },
   adFlyerImage: { width: '100%', height: '100%' },
-  adPlaceholder: { width: '100%', height: '100%', backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
-  adPlaceholderText: { color: '#ffffff', fontSize: 10 },
+  adPlaceholder: { 
+    width: '100%', 
+    height: '100%', 
+    backgroundColor: 'rgba(255,255,255,0.18)', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+  },
+  adPlaceholderText: { color: '#ffffff', fontSize: 10, fontWeight: '600' },
 
   scrollPadding: { paddingHorizontal: 20 },
   categoryChip: { paddingVertical: 10, paddingHorizontal: 18, backgroundColor: colors.card, marginRight: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
@@ -5807,12 +6783,12 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
   activeCategoryText: { color: '#ffffff', fontWeight: '700' },
 
   card: { backgroundColor: colors.card, borderRadius: 20, marginBottom: 16, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  cardLayout: { flexDirection: 'row', padding: 16 },
-  flyerContainer: { width: 90, height: 120, backgroundColor: colors.surface, borderRadius: 12, overflow: 'hidden' },
+  cardLayout: { flexDirection: 'row', padding: 12 },
+  flyerContainer: { width: 75, height: 100, backgroundColor: colors.surface, borderRadius: 12, overflow: 'hidden' },
   flyerImage: { width: '100%', height: '100%' },
   placeholderFlyer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   placeholderText: { fontSize: 10, color: colors.textSecondary, fontWeight: 'bold' },
-  cardContent: { flex: 1, paddingLeft: 16 },
+  cardContent: { flex: 1, paddingLeft: 12 },
   tagRow: { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
   appearanceBadge: { backgroundColor: colors.primaryLight + '30', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   appearanceBadgeText: { fontSize: 9, fontWeight: '800', color: colors.primary },
