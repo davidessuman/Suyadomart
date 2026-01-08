@@ -225,17 +225,23 @@ type DateSelection = {
 
 // === WEB APP PRODUCT LINK GENERATOR ===
 const generateProductWebLink = (product: Product): string => {
-  const WEB_APP_DOMAIN = 'https://www.suyadomart.com/';
- 
+  const WEB_APP_DOMAIN = 'https://www.suyadomart.com';
+  const productSlug = product.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'product';
+
   const params = new URLSearchParams({
     productId: product.id,
     productTitle: product.title.substring(0, 80),
     price: product.price.toString(),
     seller: product.display_name?.substring(0, 30) || 'Seller',
-    university: product.university?.substring(0, 20) || 'Campus'
+    university: product.university?.substring(0, 20) || 'Campus',
+    slug: productSlug,
+    source: 'search',
   });
  
-  return `${WEB_APP_DOMAIN}/?${params.toString()}`;
+  return `${WEB_APP_DOMAIN}/search?${params.toString()}`;
 };
 
 // Helper functions for order status

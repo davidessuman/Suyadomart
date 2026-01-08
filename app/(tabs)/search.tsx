@@ -30,7 +30,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { formatDistanceToNow } from 'date-fns';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 import ResponsiveVideo from '../components/ResponsiveVideo';
 import { Video, ResizeMode } from 'expo-av';
@@ -2313,7 +2313,9 @@ const ProductDetailModal: React.FC<{
   isInCart: (productId: string, selectedColor?: string, selectedSize?: string) => boolean;
   onPlaceOrder: (product: Product, options?: { selectedColor?: string | null; selectedSize?: string | null; quantity?: number | null }) => void;
   showAlert: (title: string, message: string, buttons?: AlertButton[]) => void;
-}> = ({ isVisible, onClose, product, onOpenFullViewer, onSelectSimilarProduct, onAddToCart, isInCart, onPlaceOrder, showAlert }) => {
+  isAuthenticated: boolean;
+  onRequireAuth: (action?: string) => void;
+}> = ({ isVisible, onClose, product, onOpenFullViewer, onSelectSimilarProduct, onAddToCart, isInCart, onPlaceOrder, showAlert, isAuthenticated, onRequireAuth }) => {
   const { width } = useWindowDimensions();
   const [addingToCart, setAddingToCart] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
@@ -2351,6 +2353,11 @@ const ProductDetailModal: React.FC<{
   const handleAddToCart = async () => {
     if (!product) return;
 
+    if (!isAuthenticated) {
+      onRequireAuth('add this product to your cart');
+      return;
+    }
+
     setAddingToCart(true);
     try {
       await onAddToCart(product, selectedColor, selectedSize, quantity);
@@ -2367,6 +2374,10 @@ const ProductDetailModal: React.FC<{
 
   const handlePlaceOrder = () => {
     if (!product) return;
+    if (!isAuthenticated) {
+      onRequireAuth('place an order');
+      return;
+    }
     onPlaceOrder(product, { selectedColor: selectedColor || null, selectedSize: selectedSize || null, quantity });
   };
 
@@ -2705,6 +2716,7 @@ const getAvailableStock = () => {
                     border: borderColor,
                   }}
                   showAlert={showAlert}
+                  onRequireAuth={() => onRequireAuth('leave a review')}
                 />
               )}
               
@@ -3546,6 +3558,8 @@ export default function SearchScreen() {
     else if (width >= 600) return 4;
     return 3;
   });
+  const params = useLocalSearchParams();
+  const [hasHandledProductLink, setHasHandledProductLink] = useState(false);
   
   // NEW: User university and seller status state
   const [userUniversity, setUserUniversity] = useState<string | null>(null);
@@ -3593,12 +3607,25 @@ export default function SearchScreen() {
   const [alertTitle, setAlertTitle] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [alertButtons, setAlertButtons] = useState<any[]>([{ text: 'OK' }]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const router = useRouter();
 
   const showAlert = (title: string, message: string, buttons?: any[]) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertButtons(buttons || [{ text: 'OK' }]);
     setAlertVisible(true);
+  };
+
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
   };
 
   const hideAlert = () => {
@@ -3637,6 +3664,7 @@ export default function SearchScreen() {
       try {
         const currentUserId = await getCurrentUserId();
         setUserId(currentUserId);
+        setIsAuthenticated(!!currentUserId);
         
         const userInfo = await getCurrentUserUniversity();
         if (userInfo) {
@@ -3645,6 +3673,7 @@ export default function SearchScreen() {
         }
       } catch (error) {
         console.error('Error fetching user info:', error);
+        setIsAuthenticated(false);
       }
     };
     
@@ -4056,12 +4085,67 @@ export default function SearchScreen() {
     });
   };
 
+  const fetchProductById = async (productId: string): Promise<Product | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
+        .eq('id', productId)
+        .single();
+
+      if (error || !data) {
+        if (error) {
+          console.error('Error fetching product by id:', error);
+        }
+        return null;
+      }
+
+      const [enriched] = await enrichProductsWithSellerInfo([data as any]);
+      return enriched || null;
+    } catch (err) {
+      console.error('Error fetching product by id:', err);
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (userUniversity !== null) {
       loadInitialProducts();
       loadCart();
     }
   }, [selectedCategoryFilter, selectedSubCategoryFilter, userUniversity]);
+
+  useEffect(() => {
+    const openLinkedProduct = async () => {
+      const productIdParam = params.productId;
+      if (!productIdParam || Array.isArray(productIdParam) || hasHandledProductLink) {
+        return;
+      }
+
+      const allProducts = [
+        ...featuredProducts,
+        ...trendingProducts,
+        ...sections.flatMap(section => section.data),
+      ];
+
+      let productToOpen = allProducts.find(p => p.id === productIdParam) || null;
+
+      if (!productToOpen) {
+        productToOpen = await fetchProductById(productIdParam);
+      }
+
+      if (productToOpen) {
+        setSelectedProduct(productToOpen);
+        setProductDetailVisible(true);
+      }
+
+      setHasHandledProductLink(true);
+    };
+
+    const timer = setTimeout(openLinkedProduct, 600);
+
+    return () => clearTimeout(timer);
+  }, [params.productId, sections, featuredProducts, trendingProducts, hasHandledProductLink]);
 
   // Advanced search function
   const advancedSearchProducts = async (params: typeof searchParams) => {
@@ -4270,6 +4354,10 @@ export default function SearchScreen() {
   };
 
   const handleAddToCart = async (product: Product, selectedColor?: string, selectedSize?: string, quantity: number = 1) => {
+    if (!isAuthenticated) {
+      requireAuth('add items to your cart');
+      return;
+    }
     try {
       const newCartItems = await addToCart(product, selectedColor, selectedSize, quantity);
       
@@ -4359,6 +4447,10 @@ export default function SearchScreen() {
   };
 
   const handlePlaceOrder = (product: Product, options?: { selectedColor?: string | null; selectedSize?: string | null; quantity?: number | null }) => {
+    if (!isAuthenticated) {
+      requireAuth('place an order');
+      return;
+    }
     setOrderForProduct(product);
     setOrderInitialOptions(options || {});
     setIsCartOrder(false);
@@ -4367,6 +4459,10 @@ export default function SearchScreen() {
 
   const handleCartPlaceOrder = () => {
     if (cartItems.length === 0) return;
+    if (!isAuthenticated) {
+      requireAuth('place an order');
+      return;
+    }
     setOrderForProduct(null);
     setOrderInitialOptions({});
     setIsCartOrder(true);
@@ -5069,6 +5165,8 @@ export default function SearchScreen() {
         isInCart={isProductInCart}
         onPlaceOrder={handlePlaceOrder}
         showAlert={showAlert}
+        isAuthenticated={isAuthenticated}
+        onRequireAuth={requireAuth}
       />
 
       {/* Full Image Viewer Modal */}

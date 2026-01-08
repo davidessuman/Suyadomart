@@ -41,6 +41,7 @@ interface ProductReviewsSectionProps {
   currentUserId: string | null;
   theme: any;
   showAlert?: (title: string, message: string, buttons?: any[]) => void;
+  onRequireAuth?: () => void;
 }
 
 const StarRating: React.FC<{
@@ -150,6 +151,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
   currentUserId,
   theme,
   showAlert: propShowAlert,
+  onRequireAuth,
 }) => {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -222,7 +224,11 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
 
   const handleSubmitReview = async () => {
     if (!currentUserId) {
-      showAlert('Login Required', 'Please log in to leave a review');
+      if (onRequireAuth) {
+        onRequireAuth();
+      } else {
+        showAlert('Login Required', 'Please log in to leave a review');
+      }
       return;
     }
 
