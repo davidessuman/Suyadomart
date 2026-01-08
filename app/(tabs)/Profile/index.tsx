@@ -85,7 +85,7 @@ export default function ProfileScreen() {
     primaryDark: '#f57c00',
     background: isDarkMode ? '#0f172a' : '#f8fafc',
     card: isDarkMode ? '#1e293b' : '#ffffff',
-    text: isDarkMode ? '#f1f5f9' : '#1e293b',
+    text: isDarkMode ? '#f1f5f9' : '#f4f6f8ff',
     textSecondary: isDarkMode ? '#94a3b8' : '#64748b',
     border: isDarkMode ? '#334155' : '#e2e8f0',
     inputBg: isDarkMode ? '#1e293b' : '#ffffff',
@@ -719,16 +719,16 @@ export default function ProfileScreen() {
             <View style={styles.sellerContent}>
               <View style={styles.sellerHeader}>
                 <View style={[styles.sellerBadge, { backgroundColor: colors.primary }]}>
-                  <MaterialCommunityIcons name="store-check" size={24} color="white" />
+                  <MaterialCommunityIcons name="store-check" size={14} color="white" />
                 </View>
-                <Text style={[styles.sellerTitle, { color: 'green' }]}>Storefront Live</Text>
+                <Text style={[styles.sellerTitle, { color: 'rgba(16, 79, 197, 0.7)' }]}>STOREFRONT ACTIVE</Text>
               </View>
               
               <Text style={[styles.sellerWelcome, { color: 'white' }]}>WELCOME 🥳🥳</Text>
               <Text style={[styles.sellerName, { color: colors.primary }]}>
                 {profile?.full_name || 'seller'}
               </Text>
-              
+              S
               <View style={styles.sellerInfo}>
                 <View style={styles.infoCard}>
                   <MaterialCommunityIcons name="store" size={20} color={colors.text} />
@@ -1220,7 +1220,7 @@ const styles = StyleSheet.create({
   sellerContent: { alignItems: 'center', paddingHorizontal: 24, zIndex: 10 },
   sellerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   sellerBadge: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  sellerTitle: { fontSize: 28, fontWeight: '700' },
+  sellerTitle: { fontSize: 15, fontWeight: '700' },
   sellerWelcome: { fontSize: 20, marginBottom: 8 },
   sellerName: { fontSize: 36, fontWeight: '800', marginBottom: 32, textAlign: 'center' },
   sellerInfo: { width: '100%', marginBottom: 32 },
