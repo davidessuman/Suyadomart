@@ -225,7 +225,17 @@ const getStatusText = (status: string) => {
 const getDeliveryText = (option: string, isService: boolean) => {
   if (isService) {
     switch (option) {
-      case 'Meetup/pickup':  // Change from 'Meetup/pickup' to 'pickup'
+      case 'Meetup / Pickup':
+        return 'Meetup / Pickup';
+      case 'Remote':
+        return 'Remote Service';
+      case 'On-site':
+        return 'On-site Service';
+      case 'Both':
+        return 'Remote & On-site Available';
+      // Legacy values for backward compatibility
+      case 'pickup':
+      case 'Meetup/pickup':
         return 'Meetup / Pickup';
       case 'remote':
         return 'Remote Service';
@@ -238,12 +248,20 @@ const getDeliveryText = (option: string, isService: boolean) => {
     }
   } else {
     switch (option) {
-      case 'pickup':  // Change from 'Meetup/pickup' to 'pickup'
+      case 'Meetup / Pickup':
+        return 'Meetup / Pickup';
+      case 'Campus Delivery':
+        return 'Campus Delivery';
+      case 'Both':
+        return 'Meetup / Pickup & Campus Delivery';
+      // Legacy values for backward compatibility
+      case 'pickup':
+      case 'Meetup/pickup':
         return 'Meetup / Pickup';
       case 'campus delivery':
         return 'Campus Delivery';
       case 'both':
-        return 'Pickup & Campus Delivery';
+        return 'Meetup / Pickup & Campus Delivery';
       default:
         return option;
     }
@@ -603,6 +621,9 @@ function SellerDashboardContent() {
   const [newColor, setNewColor] = useState('');
   const [brand, setBrand] = useState('');
   const [deliveryOption, setDeliveryOption] = useState<'Meetup / Pickup' | 'Campus delivery' | 'Both' | 'Remote' | 'On-site' | 'Both (Remote & On-site)' | ''>('');
+  const [isPreOrder, setIsPreOrder] = useState(false);
+  const [preOrderDuration, setPreOrderDuration] = useState('');
+  const [preOrderDurationUnit, setPreOrderDurationUnit] = useState<'days' | 'weeks' | 'months'>('days');
   const [description, setDescription] = useState('');
   const [productDetailModal, setProductDetailModal] = useState(false);
   const [selectedProductDetail, setSelectedProductDetail] = useState<any>(null);
@@ -869,8 +890,8 @@ function SellerDashboardContent() {
   // Delivery options based on product type - UPDATED: Removed nationwide shipping
   const deliveryOptions = useMemo(() => {
   return isService
-    ? ['pickup', 'remote', 'on-site', 'both']  // Change 'Meetup/pickup' to 'pickup'
-    : ['pickup', 'campus delivery', 'both'];
+    ? ['Meetup / Pickup', 'Remote', 'On-site', 'Both']
+    : ['Meetup / Pickup', 'Campus Delivery', 'Both'];
 }, [isService]);
 
   // WORKING LOGOUT FUNCTION - UPDATED WITH CUSTOM ALERT
@@ -2197,11 +2218,13 @@ function SellerDashboardContent() {
                 </View>
                 <View style={[styles.deliveryOption, { backgroundColor: themeColors.card }]}>
                   <Ionicons 
-                    name={selectedProductDetail.delivery_option === 'pickup' ? 'location-outline' : 
-                          selectedProductDetail.delivery_option === 'campus delivery' ? 'school-outline' :
-                          selectedProductDetail.delivery_option === 'both' ? 'options-outline' :
-                          selectedProductDetail.delivery_option === 'remote' ? 'laptop-outline' :
-                          selectedProductDetail.delivery_option === 'on-site' ? 'home-outline' : 'checkmark-circle-outline'}
+                    name={
+                      selectedProductDetail.delivery_option === 'Meetup / Pickup' || selectedProductDetail.delivery_option === 'pickup' ? 'location-outline' : 
+                      selectedProductDetail.delivery_option === 'Campus Delivery' || selectedProductDetail.delivery_option === 'campus delivery' ? 'school-outline' :
+                      selectedProductDetail.delivery_option === 'Both' || selectedProductDetail.delivery_option === 'both' ? 'options-outline' :
+                      selectedProductDetail.delivery_option === 'Remote' || selectedProductDetail.delivery_option === 'remote' ? 'laptop-outline' :
+                      selectedProductDetail.delivery_option === 'On-site' || selectedProductDetail.delivery_option === 'on-site' ? 'home-outline' : 'checkmark-circle-outline'
+                    }
                     size={24} 
                     color={themeColors.primary} 
                   />
@@ -2211,18 +2234,49 @@ function SellerDashboardContent() {
                     </Text>
                     <Text style={[styles.deliveryDescription, { color: themeColors.textSecondary }]}>
                       {selectedProductDetail.category === 'Services' 
-                        ? selectedProductDetail.delivery_option === 'both' 
+                        ? (selectedProductDetail.delivery_option === 'Both' || selectedProductDetail.delivery_option === 'both')
                           ? 'Available for both remote and on-site service'
-                          : selectedProductDetail.delivery_option === 'Meetup / Pickup'
+                          : (selectedProductDetail.delivery_option === 'Meetup / Pickup' || selectedProductDetail.delivery_option === 'pickup')
                           ? 'Meetup at agreed location'
                           : 'Service provided as specified'
-                        : selectedProductDetail.delivery_option === 'both'
-                        ? 'Available for both pickup and campus delivery'
+                        : (selectedProductDetail.delivery_option === 'Both' || selectedProductDetail.delivery_option === 'both')
+                        ? 'Available for both meetup/pickup and campus delivery'
                         : 'Standard delivery option'}
                     </Text>
                   </View>
                 </View>
               </View>
+
+              {/* Product Availability - Pre-Order/Stock Information */}
+              {selectedProductDetail.category !== 'Services' && (
+                <View style={[styles.availabilitySection, { backgroundColor: themeColors.inputBackground }]}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons 
+                      name={selectedProductDetail.is_pre_order ? 'time-outline' : 'checkmark-circle-outline'} 
+                      size={20} 
+                      color={themeColors.primary} 
+                    />
+                    <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Product Availability</Text>
+                  </View>
+                  <View style={[styles.availabilityOption, { backgroundColor: themeColors.card }]}>
+                    <Ionicons 
+                      name={selectedProductDetail.is_pre_order ? 'time-outline' : 'checkmark-circle-outline'} 
+                      size={24} 
+                      color={selectedProductDetail.is_pre_order ? themeColors.warning : themeColors.success} 
+                    />
+                    <View style={styles.availabilityInfo}>
+                      <Text style={[styles.availabilityTitle, { color: themeColors.text }]}>
+                        {selectedProductDetail.is_pre_order ? 'Pre-Order' : 'In Stock'}
+                      </Text>
+                      <Text style={[styles.availabilityDescription, { color: themeColors.textSecondary }]}>
+                        {selectedProductDetail.is_pre_order 
+                          ? `Arrives in ${selectedProductDetail.pre_order_duration} ${selectedProductDetail.pre_order_duration_unit}`
+                          : 'Available for immediate delivery'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               {/* Description */}
               {selectedProductDetail.description && (
@@ -2463,12 +2517,12 @@ function SellerDashboardContent() {
       );
     };
 
-    // Full-screen video feed item renderer (like home page)
-    const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-      const isVideoItem = item.media_urls?.[0]?.includes('.mp4');
+    // Feed Item Component - extracted to avoid hooks in render function
+    const FeedItemComponent = ({ item, index }: { item: any; index: number }) => {
       const [isPlaying, setIsPlaying] = useState(currentlyPlayingId === item.id);
       const [isBuffering, setIsBuffering] = useState(false);
       const localVideoRef = useRef<any>(null);
+      const isVideoItem = item.media_urls?.[0]?.includes('.mp4');
 
       // Update playing state when currentlyPlayingId changes
       useEffect(() => {
@@ -2634,54 +2688,23 @@ function SellerDashboardContent() {
       );
     };
 
+    // Memoized component to prevent unnecessary re-renders
+    const MemoizedFeedItem = React.memo(FeedItemComponent);
+
+    // Render function using memoized component
+    const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
+      return <MemoizedFeedItem item={item} index={index} />;
+    };
+
     return (
       <>
-        {/* View mode toggle for grid view */}
-        {hasVideos && viewMode === 'grid' && (
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingVertical: 8 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: themeColors.primary + '15',
-                paddingVertical: 8,
-                paddingHorizontal: 12,
-                borderRadius: 20,
-                flexDirection: 'row',
-                alignItems: 'center',
-                borderWidth: 1,
-                borderColor: themeColors.primary,
-              }}
-              onPress={() => setViewMode('feed')}
-            >
-              <Ionicons name="play-circle-outline" size={20} color={themeColors.primary} />
-              <Text style={{ color: themeColors.primary, marginLeft: 6, fontSize: 12, fontWeight: '600' }}>Video Feed</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {viewMode === 'grid' ? (
-          <FlatList 
-            data={products} 
-            renderItem={renderProductItem} 
-            keyExtractor={(item) => item.id} 
-            contentContainerStyle={styles.productsListContainer} 
-            showsVerticalScrollIndicator={false} 
-          />
-        ) : (
-          <FlatList
-            data={products}
-            renderItem={renderFeedItem}
-            keyExtractor={item => item.id}
-            pagingEnabled
-            snapToAlignment="start"
-            snapToInterval={height}
-            decelerationRate="fast"
-            showsVerticalScrollIndicator={false}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            getItemLayout={(_, index) => ({ length: height, offset: height * index, index })}
-            style={{ flex: 1 }}
-          />
-        )}
+        <FlatList 
+          data={products} 
+          renderItem={renderProductItem} 
+          keyExtractor={(item) => item.id} 
+          contentContainerStyle={styles.productsListContainer} 
+          showsVerticalScrollIndicator={false}
+        />
       </>
     );
   });
@@ -3059,6 +3082,9 @@ function SellerDashboardContent() {
       setColorStock(fullProduct.color_stock || {}); // Load color stock
       setBrand(fullProduct.brand || '');
       setDeliveryOption(fullProduct.delivery_option || 'Meetup / Pickup');
+      setIsPreOrder(fullProduct.is_pre_order || false);
+      setPreOrderDuration(fullProduct.pre_order_duration?.toString() || '');
+      setPreOrderDurationUnit(fullProduct.pre_order_duration_unit || 'days');
       setDescription(fullProduct.description || '');
       setSelectedMedia((fullProduct.media_urls || []).map((url: string) => ({ 
         uri: url, 
@@ -3108,6 +3134,9 @@ function SellerDashboardContent() {
     setNewColor('');
     setBrand('');
     setDeliveryOption('Meetup / Pickup');
+    setIsPreOrder(false);
+    setPreOrderDuration('');
+    setPreOrderDurationUnit('days');
     setDescription('');
     setColorMediaAssignments({});
     setSelectedColorForMedia('');
@@ -3407,6 +3436,16 @@ function SellerDashboardContent() {
         // Create new product - FIXED: Calculate total quantity properly
         const totalQuantity = isService ? 0 : totalStock;
         
+        // Validation for pre-order
+        if (!isService && isPreOrder && (!preOrderDuration || parseInt(preOrderDuration) <= 0)) {
+          showAlert({
+            title: 'Required',
+            message: 'Please specify the pre-order duration',
+            type: 'warning'
+          });
+          return;
+        }
+        
         const productData: any = {
           title: title.trim(),
           price: parseFloat(sellingPrice),
@@ -3424,6 +3463,9 @@ function SellerDashboardContent() {
           // FIX: Set empty color_media initially, will be updated after upload
           color_media: {},
           delivery_option: deliveryOption,
+          is_pre_order: isService ? false : isPreOrder,
+          pre_order_duration: isService || !isPreOrder ? null : parseInt(preOrderDuration),
+          pre_order_duration_unit: isService || !isPreOrder ? null : preOrderDurationUnit,
           description: description.trim() || null,
           is_service: isService,
           media_urls: [],
@@ -3491,6 +3533,16 @@ function SellerDashboardContent() {
       // For editing existing product - FIXED: Calculate total quantity properly
       const totalQuantity = isService ? 0 : totalStock;
       
+      // Validation for pre-order
+      if (!isService && isPreOrder && (!preOrderDuration || parseInt(preOrderDuration) <= 0)) {
+        showAlert({
+          title: 'Required',
+          message: 'Please specify the pre-order duration',
+          type: 'warning'
+        });
+        return;
+      }
+      
       const productData: any = {
         title: title.trim(),
         price: parseFloat(sellingPrice),
@@ -3508,6 +3560,9 @@ function SellerDashboardContent() {
         // FIX: Include color_media assignments
         color_media: colorMediaAssignments,
         delivery_option: deliveryOption,
+        is_pre_order: isService ? false : isPreOrder,
+        pre_order_duration: isService || !isPreOrder ? null : parseInt(preOrderDuration),
+        pre_order_duration_unit: isService || !isPreOrder ? null : preOrderDurationUnit,
         description: description.trim() || null,
         media_urls: finalMediaUrls,
       };
@@ -4001,16 +4056,86 @@ function SellerDashboardContent() {
                   <TouchableOpacity key={opt} style={styles.radioRow} onPress={() => setDeliveryOption(opt)}>
                     <Ionicons name={deliveryOption === opt ? "radio-button-on" : "radio-button-off"} size={24} color={deliveryOption === opt ? themeColors.primary : themeColors.textSecondary} />
                     <Text style={[styles.radioText, { color: themeColors.text }]}>
-  {opt === 'pickup' ? 'Meetup / Pickup' :  // Change 'Meetup/pickup' to 'pickup'
-   opt === 'remote' ? 'Remote Service' :
-   opt === 'on-site' ? 'On-site Service' :
-   opt === 'both' ? (isService ? 'Remote & On-site Available' : 'Pickup & Campus Delivery') :
-   'Campus Delivery'}
-</Text>
+                      {opt === 'Both' ? (isService ? 'Both (Remote & On-site)' : 'Both (Meetup / Pickup & Campus Delivery)') : opt}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
+            
+            {!isService && (
+              <View style={[styles.sectionContainer, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+                <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Product Availability *</Text>
+                
+                {/* Pre-order Toggle */}
+                <View style={styles.radioGroup}>
+                  <TouchableOpacity style={styles.radioRow} onPress={() => { setIsPreOrder(false); setPreOrderDuration(''); }}>
+                    <Ionicons name={!isPreOrder ? "radio-button-on" : "radio-button-off"} size={24} color={!isPreOrder ? themeColors.primary : themeColors.textSecondary} />
+                    <Text style={[styles.radioText, { color: themeColors.text }]}>In Stock - Available Now</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity style={styles.radioRow} onPress={() => setIsPreOrder(true)}>
+                    <Ionicons name={isPreOrder ? "radio-button-on" : "radio-button-off"} size={24} color={isPreOrder ? themeColors.primary : themeColors.textSecondary} />
+                    <Text style={[styles.radioText, { color: themeColors.text }]}>Pre-Order</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Pre-order Duration Input */}
+                {isPreOrder && (
+                  <View style={{ marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: themeColors.border }}>
+                    <Text style={[styles.inputLabel, { color: themeColors.text, marginBottom: 10 }]}>How long will it take to arrive? *</Text>
+                    <View style={styles.rowInputs}>
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <TextInput
+                          style={[styles.proInput, { backgroundColor: themeColors.inputBackground, borderColor: themeColors.inputBorder, color: themeColors.text }]}
+                          placeholder="e.g., 2"
+                          keyboardType="number-pad"
+                          value={preOrderDuration}
+                          onChangeText={(v) => setPreOrderDuration(v.replace(/[^0-9]/g, ''))}
+                          placeholderTextColor={themeColors.placeholder}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <ScrollView 
+                          horizontal 
+                          showsHorizontalScrollIndicator={false}
+                          style={{ maxHeight: 50 }}
+                        >
+                          {(['days', 'weeks', 'months'] as const).map((unit) => (
+                            <TouchableOpacity
+                              key={unit}
+                              style={[
+                                styles.categoryChip,
+                                preOrderDurationUnit === unit && [
+                                  styles.categoryChipActive,
+                                  { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }
+                                ],
+                                { backgroundColor: themeColors.chipBackground }
+                              ]}
+                              onPress={() => setPreOrderDurationUnit(unit)}
+                            >
+                              <Text style={[
+                                styles.categoryText,
+                                preOrderDurationUnit === unit && [
+                                  styles.categoryTextActive,
+                                  { color: themeColors.primary }
+                                ],
+                                { color: themeColors.text }
+                              ]}>
+                                {unit === 'days' ? 'Days' : unit === 'weeks' ? 'Weeks' : 'Months'}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                    <Text style={[styles.inputHint, { color: themeColors.textSecondary, marginTop: 8 }]}>
+                      Example: 2 weeks means customers will receive their order in 2 weeks
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
             <View style={{ height: 150 }} />
           </ScrollView>
         </KeyboardAvoidingView>

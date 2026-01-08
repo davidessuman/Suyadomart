@@ -149,6 +149,9 @@ interface Product {
   category: string;
   brand: string | null;
   delivery_option: string;
+  is_pre_order?: boolean;
+  pre_order_duration?: number;
+  pre_order_duration_unit?: 'days' | 'weeks' | 'months';
   sizes_available?: string[];
   colors_available?: string[];
   color_media?: Record<string, string[]>;
@@ -2282,12 +2285,18 @@ const FullImageViewer: React.FC<{
 // Helper function to format delivery option
 const formatDeliveryOption = (option: string): string => {
   const deliveryMap: Record<string, string> = {
-    'pickup': 'Pickup',
+    'Meetup / Pickup': 'Meetup / Pickup',
+    'Campus Delivery': 'Campus Delivery',
+    'Both': 'Meetup / Pickup & Campus Delivery',
+    'Remote': 'Remote Service',
+    'On-site': 'On-site Service',
+    // Legacy values for backward compatibility
+    'pickup': 'Meetup / Pickup',
     'campus delivery': 'Campus Delivery',
-    'nationwide': 'Nationwide Delivery',
-    'remote': 'Remote Delivery',
+    'both': 'Meetup / Pickup & Campus Delivery',
+    'remote': 'Remote Service',
     'on-site': 'On-site Service',
-    'both': 'Pickup & Delivery'
+    'nationwide': 'Nationwide Delivery'
   };
   
   return deliveryMap[option] || option;
@@ -2456,6 +2465,27 @@ const getAvailableStock = () => {
                   </Text>
                 </View>
               </View>
+              
+              {/* Pre-Order / Stock Availability Display */}
+              {product.is_pre_order ? (
+                <View style={[styles.deliveryInfoContainer, { backgroundColor: cardBackground, borderColor }]}>
+                  <Ionicons name="time-outline" size={20} color={PRIMARY_COLOR} />
+                  <View style={styles.deliveryInfoContent}>
+                    <Text style={[styles.deliveryInfoTitle, { color: textColor }]}>Pre-Order</Text>
+                    <Text style={[styles.deliveryInfoValue, { color: PRIMARY_COLOR }]}>
+                      Arrives in {product.pre_order_duration} {product.pre_order_duration_unit}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={[styles.deliveryInfoContainer, { backgroundColor: cardBackground, borderColor }]}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={PRIMARY_COLOR} />
+                  <View style={styles.deliveryInfoContent}>
+                    <Text style={[styles.deliveryInfoTitle, { color: textColor }]}>Availability</Text>
+                    <Text style={[styles.deliveryInfoValue, { color: PRIMARY_COLOR }]}>In Stock - Available Now</Text>
+                  </View>
+                </View>
+              )}
               
               {/* Color Selection - Modern Design */}
               {product.colors_available && product.colors_available.length > 0 && (
@@ -3790,7 +3820,7 @@ export default function SearchScreen() {
     try {
       let query = supabase
         .from('products')
-        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -3834,7 +3864,7 @@ export default function SearchScreen() {
     try {
       let query = supabase
         .from('products')
-        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -3878,7 +3908,7 @@ export default function SearchScreen() {
     try {
       let query = supabase
         .from('products')
-        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .order('created_at', { ascending: false })
         .limit(200);
 
@@ -3928,7 +3958,7 @@ export default function SearchScreen() {
     // Fetch all campus products for Home section or filtered products for specific category
     let query = supabase
       .from('products')
-      .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
+      .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
       .order('created_at', { ascending: false });
 
     // Only apply category filter when a specific category is selected
@@ -4040,7 +4070,7 @@ export default function SearchScreen() {
     try {
       let queryBuilder = supabase
         .from('products')
-        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock');
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit');
 
       // Build conditions based on search parameters
       const conditions = [];
@@ -4135,7 +4165,7 @@ export default function SearchScreen() {
       
       let queryBuilder = supabase
         .from('products')
-        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock')
+        .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .or(`title.ilike.%${text}%,category.ilike.%${text}%`)
         .order('created_at', { ascending: false })
         .limit(200);

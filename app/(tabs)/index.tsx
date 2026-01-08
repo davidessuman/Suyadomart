@@ -119,6 +119,10 @@ interface Product {
   size_stock?: Record<string, string>;
   isFromSameSeller?: boolean;
   similarityScore?: number;
+  delivery_option?: string;
+  is_pre_order?: boolean;
+  pre_order_duration?: number;
+  pre_order_duration_unit?: string;
 }
 
 interface Comment {
@@ -185,6 +189,28 @@ const getCardDisplayMedia = (urls?: string[] | null): string | undefined => {
   
   // First media is not a video, return it
   return arr[0];
+};
+
+// Format delivery option for display
+const formatDeliveryOption = (option?: string): string => {
+  if (!option) return 'Not specified';
+  
+  const deliveryMap: Record<string, string> = {
+    'Meetup / Pickup': 'Meetup / Pickup',
+    'Campus Delivery': 'Campus Delivery',
+    'Both': 'Meetup / Pickup & Campus Delivery',
+    'Remote': 'Remote Service',
+    'On-site': 'On-site Service',
+    // Legacy values for backward compatibility
+    'pickup': 'Meetup / Pickup',
+    'campus delivery': 'Campus Delivery',
+    'both': 'Meetup / Pickup & Campus Delivery',
+    'remote': 'Remote Service',
+    'on-site': 'On-site Service',
+    'nationwide': 'Nationwide Delivery'
+  };
+  
+  return deliveryMap[option] || option;
 };
 
 // Calendar filter types
@@ -5327,6 +5353,40 @@ const ProductDetailModal: React.FC<{
                   )}
                 </View>
                 
+                {/* Delivery Option Display */}
+                {displayProduct.delivery_option && (
+                  <View style={[styles.deliveryInfoContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Ionicons name="car-outline" size={20} color={theme.primary} />
+                    <View style={styles.deliveryInfoContent}>
+                      <Text style={[styles.deliveryInfoTitle, { color: theme.text }]}>Delivery Option</Text>
+                      <Text style={[styles.deliveryInfoValue, { color: theme.primary }]}>
+                        {formatDeliveryOption(displayProduct.delivery_option)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                
+                {/* Pre-Order / Stock Availability Display */}
+                {displayProduct.is_pre_order ? (
+                  <View style={[styles.deliveryInfoContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Ionicons name="time-outline" size={20} color={theme.primary} />
+                    <View style={styles.deliveryInfoContent}>
+                      <Text style={[styles.deliveryInfoTitle, { color: theme.text }]}>Pre-Order</Text>
+                      <Text style={[styles.deliveryInfoValue, { color: theme.primary }]}>
+                        Arrives in {displayProduct.pre_order_duration} {displayProduct.pre_order_duration_unit}
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={[styles.deliveryInfoContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <Ionicons name="checkmark-circle-outline" size={20} color={theme.primary} />
+                    <View style={styles.deliveryInfoContent}>
+                      <Text style={[styles.deliveryInfoTitle, { color: theme.text }]}>Availability</Text>
+                      <Text style={[styles.deliveryInfoValue, { color: theme.primary }]}>In Stock - Available Now</Text>
+                    </View>
+                  </View>
+                )}
+                
                 {/* Size Selection Section */}
                 {hasSizes && (
                   <View style={[styles.sizeSelectionSection, { backgroundColor: theme.surface }]}>
@@ -6154,8 +6214,20 @@ const ProductFeedCard: React.FC<{
         <Text style={[styles.swipeText, { color: theme.textSecondary }]}>Swipe up for next product</Text>
       </View>
       
-      {/* Left Sidebar with Cart and Order Icons */}
+      {/* Left Sidebar with Availability Badge, Cart and Order Icons */}
       <View style={[styles.leftSidebar, { top: insets.top + 80 }]}>
+        {/* Availability Badge above Cart button */}
+        <View
+          style={[
+            styles.availabilityBadge,
+            { position: 'relative', alignSelf: 'center', marginBottom: 10, backgroundColor: item.is_pre_order ? theme.primary : theme.success }
+          ]}
+        >
+          <Ionicons name={item.is_pre_order ? 'time-outline' : 'checkmark-circle'} size={14} color="#fff" />
+          <Text style={styles.availabilityBadgeText}>
+            {item.is_pre_order ? 'Pre-Order' : 'In Stock'}
+          </Text>
+        </View>
         <TouchableOpacity style={styles.leftSidebarItem} onPress={handleAddToCart} disabled={addingToCart}>
           {addingToCart ? (
             <ActivityIndicator size="small" color={theme.primary} />
@@ -6224,30 +6296,54 @@ const ProductFeedCard: React.FC<{
         </TouchableOpacity>
       </View>
       
-      <View style={[styles.bottomInfoContainer, { width: width - 80, bottom: insets.bottom + 50 }]}>
-        {/* Product Info Card with Modern Design */}
-        <View style={[
-          styles.productInfoCard,
+      <View
+        style={[
+          styles.bottomInfoContainer,
           {
-            backgroundColor: `${theme.background}E6`,
-            borderColor: theme.border,
-            shadowColor: theme.shadow,
+            width: isLargeScreenCard ? Math.min(width * 0.35, 420) : width - 80,
+            bottom: insets.bottom + (isLargeScreenCard ? 60 : 50),
+            ...(isLargeScreenCard ? { left: undefined, right: 18 } : { left: 18 })
           }
-        ]}>
+        ]}
+      >
+        {/* Product Info Card with Modern Design */}
+        <View
+          style={[
+            styles.productInfoCard,
+            {
+              backgroundColor: `${theme.background}E6`,
+              borderColor: theme.border,
+              shadowColor: theme.shadow,
+            }
+          ]}
+        >
           <View style={[styles.productCardHeader, { borderBottomColor: theme.border }]}>
             <Ionicons name="pricetag" size={16} color={theme.primary} style={{ marginRight: 6 }} />
             <Text style={[styles.productLabel, { color: theme.textSecondary }]}>PRODUCT</Text>
           </View>
-          <Text style={[styles.titleTeaser, { color: theme.text }]} numberOfLines={2}>{item.title}</Text>
+          <Text
+            style={[
+              styles.titleTeaser,
+              { color: theme.text }
+            ]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
           <View style={styles.userInfoColumn}>
-            <Text style={[styles.username, { color: theme.primary }]}>
+            <Text
+              style={[
+                styles.username,
+                { color: theme.primary }
+              ]}
+            >
               @{(item.display_name || '').toLowerCase()}
             </Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.viewProductButton, 
-              { 
+              styles.viewProductButton,
+              {
                 backgroundColor: theme.primary,
                 shadowColor: theme.primary,
                 shadowOffset: { width: 0, height: 4 },
@@ -6255,11 +6351,18 @@ const ProductFeedCard: React.FC<{
                 shadowRadius: 8,
                 elevation: 5,
               }
-            ]} 
+            ]}
             onPress={() => openModal(item, false)}
           >
             <Ionicons name="eye" size={16} color={theme.background} style={{ marginRight: 6 }} />
-            <Text style={[styles.viewProductButtonText, { color: theme.background }]}>View Details</Text>
+              <Text
+                style={[
+                  styles.viewProductButtonText,
+                  { color: theme.background }
+                ]}
+              >
+              View Details
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -6486,6 +6589,7 @@ export default function BuyerScreen() {
               .select(`
                 id, title, description, price, original_price, quantity,
                 media_urls, seller_id, created_at,
+                delivery_option, is_pre_order, pre_order_duration, pre_order_duration_unit,
                 user_profiles(full_name, avatar_url, university),
                 shops(name, avatar_url)
               `)
@@ -7619,7 +7723,7 @@ export default function BuyerScreen() {
       // OR products from the current user (if they're a seller)
       let query = supabase
         .from('products')
-        .select('id, title, description, price, original_price, quantity, media_urls, seller_id, created_at')
+        .select('id, title, description, price, original_price, quantity, media_urls, seller_id, created_at, delivery_option, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .range(from, to)
         .order('created_at', { ascending: false });
       
@@ -8450,7 +8554,7 @@ const styles = StyleSheet.create({
   ordersBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold',},
   
   // Left Sidebar
-  leftSidebar: { marginTop: 170,position: 'absolute',left: 12,zIndex: 10,alignItems: 'center',},
+  leftSidebar: { marginTop: 90,position: 'absolute',left: 12,zIndex: 10,alignItems: 'center',},
   leftSidebarItem: {marginBottom: 20,alignItems: 'center',},
   leftSidebarText: {fontSize: 13,marginTop: 4,fontWeight: '600',textShadowColor: 'rgba(0,0,0,0.7)',textShadowRadius: 6,},
   // Feed Card
@@ -8517,11 +8621,11 @@ const styles = StyleSheet.create({
   },
   
   // Bottom Info - Modern Card Design
-  bottomInfoContainer: { position: 'absolute', left: 18, zIndex: 10, marginBottom: 25 },
+  bottomInfoContainer: { position: 'absolute', left: 5, zIndex: 10, marginBottom: 10 },
   productInfoCard: {
     backgroundColor: '#FFFFFFCC',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 9,
+    padding: 10,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -8540,8 +8644,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.2,
   },
-  titleTeaser: { fontSize: 18, fontWeight: '600', marginBottom: 6, lineHeight: 24 },
-  userInfoColumn: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10 },
+  titleTeaser: { fontSize: 15, fontWeight: '600', marginBottom: 6, lineHeight: 14 },
+  userInfoColumn: { flexDirection: 'column', alignItems: 'flex-start', marginBottom: 6 },
   username: { fontWeight: '700', fontSize: 15, letterSpacing: 0.3 },
   universityText: { fontSize: 14, fontWeight: '500', marginTop: 2 },
   viewProductButton: { 
@@ -8585,6 +8689,27 @@ const styles = StyleSheet.create({
   modalDiscountText: { color: '#ef8103ff', fontWeight: '900', fontSize: 13 },
   modalSectionTitle: { fontSize: 20, fontWeight: '700', marginTop: 15, marginBottom: 10, borderBottomWidth: 1, paddingBottom: 5 },
   modalDescription: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
+  deliveryInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 15,
+    borderWidth: 1,
+  },
+  deliveryInfoContent: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  deliveryInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  deliveryInfoValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
   modalSellerInfo: { flexDirection: 'row', alignItems: 'center', marginTop: 20, paddingTop: 20, borderTopWidth: 1 },
   modalSellerAvatar: { width: 45, height: 45, borderRadius: 27.5, marginRight: 15, borderWidth: 2 },
   modalSellerTextContainer: { flex: 1, marginLeft: 15 },
@@ -8667,6 +8792,22 @@ const styles = StyleSheet.create({
   sellerProductGridActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   sellerProductGridCartButton: { padding: 6, borderRadius: 15 },
   sellerProductGridOrderButton: { padding: 6, borderRadius: 15 },
+  // Availability Badge on feed
+  availabilityBadge: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+    zIndex: 20,
+  },
+  availabilityBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   
   // Similar Products
   similarContainer: {marginTop: 25,paddingTop: 20,borderTopWidth: 1,},
