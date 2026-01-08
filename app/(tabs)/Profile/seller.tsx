@@ -286,6 +286,26 @@ const parseLocation = (location: string, university: string) => {
   };
 };
 
+// === MEDIA UTILITY FUNCTIONS (kept in sync with Home/Search behavior) ===
+const formatProductMediaUrl = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  if (
+    url.startsWith('http') ||
+    url.startsWith('file:') ||
+    url.startsWith('content:') ||
+    url.startsWith('asset:')
+  ) {
+    return url;
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
+};
+
+const isVideoUrl = (url?: string): boolean => {
+  if (!url) return false;
+  const clean = url.split('?')[0].toLowerCase();
+  return clean.endsWith('.mp4') || clean.endsWith('.mov') || clean.endsWith('.m4v') || clean.endsWith('.webm');
+};
+
 // Helper function to get media indices for a specific color
 const getMediaIndicesForColor = (color: string, product: any) => {
   if (!product || !product.media_urls || !product.color_media) return [];
@@ -1846,7 +1866,7 @@ function SellerDashboardContent() {
           <ScrollView style={styles.productDetailContent} showsVerticalScrollIndicator={false} contentContainerStyle={isLargeScreen ? { alignItems: 'center' } : {}}>
             {/* Media Gallery Section - UPDATED TO SHOW COLOR-SPECIFIC MEDIA */}
             <View style={styles.mediaGalleryContainer}>
-              {selectedProductDetail.media_urls?.[currentMediaIndex]?.includes('.mp4') ? (
+              {isVideoUrl(selectedProductDetail.media_urls?.[currentMediaIndex]) ? (
                 <TouchableOpacity 
                   style={[
                     styles.mainMedia, 
@@ -1867,7 +1887,7 @@ function SellerDashboardContent() {
                 >
                   {/* Video for display */}
                   <ResponsiveVideo
-                    uri={selectedProductDetail.media_urls[currentMediaIndex]}
+                    uri={formatProductMediaUrl(selectedProductDetail.media_urls?.[currentMediaIndex]) || ''}
                     autoPlay={false}
                     controls
                     containerStyle={{ width: '100%', height: '100%', borderRadius: 16 }}
@@ -1931,7 +1951,7 @@ function SellerDashboardContent() {
                   style={isLargeScreen ? { width: mediaWidth, height: mediaHeight } : { width: '100%', height: 350 }}
                 >
                   <Image
-                    source={{ uri: selectedProductDetail.media_urls?.[currentMediaIndex] }}
+                    source={{ uri: formatProductMediaUrl(selectedProductDetail.media_urls?.[currentMediaIndex]) }}
                     style={styles.mainMedia}
                     resizeMode="contain"
                   />
@@ -2013,10 +2033,10 @@ function SellerDashboardContent() {
                         ]}
                         onPress={() => setCurrentMediaIndex(index)}
                       >
-                        {url.includes('.mp4') ? (
+                        {isVideoUrl(url) ? (
                           <View style={styles.videoThumbnailWrapper}>
                             <ResponsiveVideo
-                              uri={url}
+                              uri={formatProductMediaUrl(url) || ''}
                               autoPlay={false}
                               controls={false}
                               containerStyle={[styles.thumbnailImage, { borderRadius: 10 }]}
@@ -2026,7 +2046,7 @@ function SellerDashboardContent() {
                             </View>
                           </View>
                         ) : (
-                          <Image source={{ uri: url }} style={styles.thumbnailImage} resizeMode="cover" />
+                          <Image source={{ uri: formatProductMediaUrl(url) }} style={styles.thumbnailImage} resizeMode="cover" />
                         )}
                         
                         {colorForMedia && (
@@ -4363,17 +4383,26 @@ const FullImageViewer: React.FC<{
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
   const listRef = useRef<FlatList<any> | null>(null);
   const videoRefs = useRef<Record<number, any>>({});
-  const { width: winWidth, height: winHeight } = useWindowDimensions();
-  const screenWidth = Dimensions.get('window').width;
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  const formattedMedia = useMemo(
+    () => (mediaUrls || []).map((u) => formatProductMediaUrl(u) || u),
+    [mediaUrls]
+  );
+
+  const clampedInitialIndex = Math.min(
+    Math.max(0, initialIndex ?? 0),
+    Math.max(0, formattedMedia.length - 1)
+  );
 
   useEffect(() => {
-    if (isVisible && initialIndex >= 0 && initialIndex < (mediaUrls || []).length) {
-      setCurrentIndex(initialIndex);
+    if (isVisible && formattedMedia.length > 0) {
+      setCurrentIndex(clampedInitialIndex);
       setTimeout(() => {
-        listRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+        listRef.current?.scrollToIndex({ index: clampedInitialIndex, animated: false });
       }, 50);
     }
-  }, [isVisible, initialIndex, mediaUrls]);
+  }, [isVisible, clampedInitialIndex, formattedMedia]);
 
   // Pause videos that are not currently visible
   useEffect(() => {
@@ -4386,7 +4415,7 @@ const FullImageViewer: React.FC<{
     });
   }, [currentIndex]);
 
-  if (!isVisible || !mediaUrls?.length) return null;
+  if (!isVisible || !formattedMedia?.length) return null;
 
   return (
     <Modal animationType="fade" transparent={true} visible={isVisible} onRequestClose={onClose}>
@@ -4398,25 +4427,39 @@ const FullImageViewer: React.FC<{
 
         <FlatList
           ref={listRef}
-          data={mediaUrls}
+          style={{ width: screenWidth, height: screenHeight }}
+          data={formattedMedia}
           horizontal
           pagingEnabled
+          snapToInterval={screenWidth}
+          snapToAlignment="center"
+          decelerationRate="fast"
+          disableIntervalMomentum
+          bounces={false}
+          overScrollMode="never"
           showsHorizontalScrollIndicator={false}
           keyExtractor={(_, i) => i.toString()}
           getItemLayout={(_, i) => ({ length: screenWidth, offset: screenWidth * i, index: i })}
+          onScrollToIndexFailed={(info) => {
+            // Fallback: approximate scroll then retry.
+            const offset = info.index * screenWidth;
+            listRef.current?.scrollToOffset({ offset, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index: info.index, animated: false }), 50);
+          }}
           onMomentumScrollEnd={(e) => setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / screenWidth))}
           renderItem={({ item: url, index }) => {
-            const isVideo = url.toLowerCase().includes('.mp4');
-            const videoUri = url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-            const containerMaxWidth = Math.min(winWidth * 0.9, 1000);
-            const containerMaxHeight = Math.min(winHeight * 0.9, 1000);
+            const isVideo = isVideoUrl(url);
+            const containerMaxWidth = Math.min(screenWidth * 0.9, 1200);
+            const containerMaxHeight = Math.min(screenHeight * 0.9, 1200);
             
             return (
-              <View style={[viewerStyles.fullViewerMediaSlide, { 
+              <View style={{ 
+                width: screenWidth,
+                height: screenHeight,
                 backgroundColor: '#000', 
                 justifyContent: 'center', 
                 alignItems: 'center',
-              }]}>
+              }}>
                 <View style={{ 
                   width: containerMaxWidth, 
                   height: containerMaxHeight, 
@@ -4429,7 +4472,7 @@ const FullImageViewer: React.FC<{
                         if (ref) videoRefs.current[index] = ref;
                         else delete videoRefs.current[index];
                       }}
-                      source={{ uri: videoUri }}
+                      source={{ uri: url }}
                       style={{ width: '100%', height: '100%' }}
                       resizeMode={ResizeMode.CONTAIN}
                       isLooping
@@ -4445,9 +4488,9 @@ const FullImageViewer: React.FC<{
           }}
         />
         
-        {mediaUrls.length > 1 && (
+        {formattedMedia.length > 1 && (
           <Text style={viewerStyles.fullViewerPaginationText}>
-            {currentIndex + 1} / {mediaUrls.length}
+            {currentIndex + 1} / {formattedMedia.length}
           </Text>
         )}
       </View>
@@ -4460,8 +4503,6 @@ const viewerStyles = StyleSheet.create({
   fullViewerContainer: {
     flex: 1,
     backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   fullViewerCloseButton: {
     position: 'absolute',
@@ -4471,17 +4512,6 @@ const viewerStyles = StyleSheet.create({
     padding: 10,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 25,
-  },
-  fullViewerMediaSlide: {
-    width: width,
-    height: height,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000',
-  },
-  fullViewerMediaImage: {
-    width: '100%',
-    height: '100%'
   },
   fullViewerPaginationText: {
     position: 'absolute',
