@@ -49,7 +49,7 @@ const categoryStructure = {
   Electronics: ['Phones', 'Laptops', 'Tablets', 'Headphones', 'Chargers', 'Gaming', 'Accessories', 'Other Electronics'],
   Beauty: ['Skincare', 'Makeup', 'Hair Care', 'Fragrance', 'Tools'],
   Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
-  Sports: ['Gym Wear', 'Equipment', 'Footwear', 'Accessories'],
+  Sports: ['Gym Wear', 'Jersey', 'Equipment', 'Footwear', 'Accessories'],
   Books: ['Textbooks', 'Novels', 'Magazines', 'Comics'],
   Food: ['Snacks', 'Drinks', 'Homemade Meals'],
   Services: [
@@ -60,6 +60,7 @@ const categoryStructure = {
     'Delivery',
     'Repair',
     'Fitness Training',
+    'Catering',
     'Beauty Services',
     'Other Services',
   ],
@@ -2284,13 +2285,13 @@ const formatDeliveryOption = (option: string): string => {
   const deliveryMap: Record<string, string> = {
     'Meetup / Pickup': 'Meetup / Pickup',
     'Campus Delivery': 'Campus Delivery',
-    'Both': 'Meetup / Pickup & Campus Delivery',
+    'Meetup / Pickup and Campus Delivery': 'Campus Delivery and Meetup / Pickup',
     'Remote': 'Remote Service',
     'On-site': 'On-site Service',
     // Legacy values for backward compatibility
     'pickup': 'Meetup / Pickup',
     'campus delivery': 'Campus Delivery',
-    'both': 'Meetup / Pickup & Campus Delivery',
+    'both': 'Campus Delivery and Meetup / Pickup',
     'remote': 'Remote Service',
     'on-site': 'On-site Service',
     'nationwide': 'Nationwide Delivery'
@@ -2889,6 +2890,45 @@ const getCategoryIcon = (category: string) => {
   return iconMap[lowerCategory] || 'pricetag-outline';
 };
 
+// Helper function to get icons for service sub-categories
+const getServiceSubCategoryIcon = (subCategory: string) => {
+  const iconMap: Record<string, string> = {
+    'tutoring': 'school-outline',
+    'photography': 'camera-outline',
+    'graphic design': 'color-palette-outline',
+    'writing': 'create-outline',
+    'delivery': 'bicycle-outline',
+    'repair': 'build-outline',
+    'fitness training': 'barbell-outline',
+    'catering': 'restaurant-outline',
+    'beauty services': 'cut-outline',
+    'other services': 'ellipsis-horizontal-outline',
+  };
+
+  const key = subCategory.toLowerCase();
+  return iconMap[key] || 'briefcase-outline';
+};
+
+// Helper function to get icons for Beauty Services tertiary types
+const getBeautyServiceTypeIcon = (beautyType: string) => {
+  const iconMap: Record<string, string> = {
+    'makeup application': 'brush-outline',
+    'hair services': 'cut-outline',
+    'barbering': 'cut-outline',
+    'facials & skincare': 'sparkles-outline',
+    'nails (manicure/pedicure)': 'hand-left-outline',
+    'waxing': 'flame-outline',
+    'threading': 'remove-outline',
+    'massage & spa': 'water-outline',
+    'tattoo': 'brush-outline',
+    'piercing': 'aperture-outline',
+    'other beauty services': 'ellipsis-horizontal-outline',
+  };
+
+  const key = beautyType.toLowerCase();
+  return iconMap[key] || 'sparkles-outline';
+};
+
 // === PROFESSIONAL CATEGORIES DRAWER ===
 const ProfessionalCategoriesDrawer: React.FC<{
   visible: boolean;
@@ -2945,6 +2985,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
     'Delivery',
     'Repair',
     'Fitness Training',
+    'Catering',
     'Beauty Services',
     'Other Services',
   ];
@@ -3183,7 +3224,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
                               >
                                 <View style={[styles.drawerItemIconContainer, isSubSelected && !expandedCategories['Beauty Services Tertiary'] && styles.drawerItemIconActive]}>
                                   <Ionicons 
-                                    name="pricetag-outline" 
+                                    name={getServiceSubCategoryIcon(subCategory)} 
                                     size={16} 
                                     color={isSubSelected && !expandedCategories['Beauty Services Tertiary'] ? PRIMARY_COLOR : textColor} 
                                   />
@@ -3235,7 +3276,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
                                     >
                                       <View style={[styles.drawerItemIconContainer, isTertiarySelected && styles.drawerItemIconActive]}>
                                         <Ionicons 
-                                          name="ellipse-outline" 
+                                          name={getBeautyServiceTypeIcon(beautyType)} 
                                           size={12} 
                                           color={isTertiarySelected ? PRIMARY_COLOR : textColor} 
                                         />
@@ -3267,7 +3308,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
                           >
                             <View style={[styles.drawerItemIconContainer, isSubSelected && styles.drawerItemIconActive]}>
                               <Ionicons 
-                                name="pricetag-outline" 
+                                name={getServiceSubCategoryIcon(subCategory)} 
                                 size={16} 
                                 color={isSubSelected ? PRIMARY_COLOR : textColor} 
                               />

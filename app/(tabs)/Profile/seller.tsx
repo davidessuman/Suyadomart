@@ -175,10 +175,10 @@ const categoryStructure = {
   Electronics: ['Phones', 'Laptops', 'Tablets', 'Headphones', 'Chargers', 'Gaming', 'Accessories', 'Other Electronics'],
   Beauty: ['Skincare', 'Makeup', 'Hair Care', 'Fragrance', 'Tools'],
   Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
-  Sports: ['Gym Wear', 'Equipment', 'Footwear', 'Accessories'],
+  Sports: ['Gym Wear', 'Jersey', 'Equipment', 'Footwear', 'Accessories'],
   Books: ['Textbooks', 'Novels', 'Magazines', 'Comics'],
   Food: ['Snacks', 'Drinks', 'Homemade Meals'],
-  Services: ['Tutoring', 'Photography', 'Graphic Design', 'Writing', 'Delivery', 'Repair', 'Fitness Training', 'Beauty Services', 'Other Services'],
+  Services: ['Tutoring', 'Photography', 'Graphic Design', 'Writing', 'Delivery', 'Repair', 'Fitness Training', 'Catering', 'Beauty Services', 'Other Services'],
   Other: ['Everything else'],
 };
 
@@ -253,7 +253,7 @@ const getDeliveryText = (option: string, isService: boolean) => {
       case 'Campus Delivery':
         return 'Campus Delivery';
       case 'Both':
-        return 'Meetup / Pickup & Campus Delivery';
+        return 'Campus Delivery and Meetup / Pickup';
       // Legacy values for backward compatibility
       case 'pickup':
       case 'Meetup/pickup':
@@ -261,10 +261,81 @@ const getDeliveryText = (option: string, isService: boolean) => {
       case 'campus delivery':
         return 'Campus Delivery';
       case 'both':
-        return 'Meetup / Pickup & Campus Delivery';
+        return 'Campus Delivery and Meetup / Pickup';
       default:
         return option;
     }
+  }
+};
+
+const normalizeDeliveryOptionForDb = (option: string | null | undefined, isService: boolean): string => {
+  const normalized = (option || '').trim();
+  if (!normalized) return 'Meetup / Pickup';
+
+  const lower = normalized.toLowerCase();
+
+  // Accept legacy DB values and map them to the NEW stored values you want.
+  if (lower === 'pickup') return 'Meetup / Pickup';
+  if (lower === 'campus delivery') return 'Campus Delivery';
+  if (lower === 'both') return 'Meetup / Pickup and Campus Delivery';
+  if (lower === 'remote') return 'remote';
+  if (lower === 'on-site') return 'on-site';
+
+  // If we already have a desired new stored value, keep it.
+  if (
+    normalized === 'Meetup / Pickup' ||
+    normalized === 'Campus Delivery' ||
+    normalized === 'Meetup / Pickup and Campus Delivery' ||
+    normalized === 'remote' ||
+    normalized === 'on-site'
+  ) {
+    return normalized;
+  }
+
+  // Map UI/legacy labels -> canonical DB values
+  switch (normalized) {
+    case 'Meetup / Pickup':
+    case 'Meetup/pickup':
+      return 'Meetup / Pickup';
+    case 'Campus Delivery':
+      return 'Campus Delivery';
+    case 'Remote':
+      return 'remote';
+    case 'On-site':
+      return 'on-site';
+    case 'Both':
+      return 'Meetup / Pickup and Campus Delivery';
+    default:
+      // Last-resort: best-effort mapping.
+      if (isService) {
+        if (lower.includes('remote')) return 'remote';
+        if (lower.includes('on-site') || lower.includes('onsite')) return 'on-site';
+        if (lower.includes('both')) return 'Meetup / Pickup and Campus Delivery';
+        return 'Meetup / Pickup';
+      }
+
+      if (lower.includes('campus') || lower.includes('delivery')) return 'Campus Delivery';
+      if (lower.includes('both')) return 'Meetup / Pickup and Campus Delivery';
+      if (lower.includes('pick')) return 'Meetup / Pickup';
+      return normalized;
+  }
+};
+
+const deliveryOptionToUi = (option: string | null | undefined, isService: boolean): string => {
+  const normalized = normalizeDeliveryOptionForDb(option, isService);
+  switch (normalized) {
+    case 'Meetup / Pickup':
+      return 'Meetup / Pickup';
+    case 'Campus Delivery':
+      return 'Campus Delivery';
+    case 'remote':
+      return 'Remote';
+    case 'on-site':
+      return 'On-site';
+    case 'Meetup / Pickup and Campus Delivery':
+      return 'Both';
+    default:
+      return 'Meetup / Pickup';
   }
 };
 
@@ -640,7 +711,7 @@ function SellerDashboardContent() {
   const [colorStock, setColorStock] = useState<Record<string, string>>({}); // NEW: Color-specific stock
   const [newColor, setNewColor] = useState('');
   const [brand, setBrand] = useState('');
-  const [deliveryOption, setDeliveryOption] = useState<'Meetup / Pickup' | 'Campus delivery' | 'Both' | 'Remote' | 'On-site' | 'Both (Remote & On-site)' | ''>('');
+  const [deliveryOption, setDeliveryOption] = useState<string>('');
   const [isPreOrder, setIsPreOrder] = useState(false);
   const [preOrderDuration, setPreOrderDuration] = useState('');
   const [preOrderDurationUnit, setPreOrderDurationUnit] = useState<'days' | 'weeks' | 'months'>('days');
@@ -867,7 +938,7 @@ function SellerDashboardContent() {
       return productGender === 'Men' ? sizeOptions.menClothing : sizeOptions.womenClothing;
     }
     if (subCategory === 'Pants & Jeans') return productGender === 'Men' ? sizeOptions.menPants : sizeOptions.womenPants;
-    if (isSports && subCategory === 'Gym Wear') return productGender === 'Men' ? sizeOptions.menClothing : sizeOptions.womenClothing;
+    if (isSports && ['Gym Wear', 'Jersey'].includes(subCategory)) return productGender === 'Men' ? sizeOptions.menClothing : sizeOptions.womenClothing;
     if (subCategory === 'Footwear') return sizeOptions.shoes;
     return [];
   }, [mainCategory, subCategory, productGender]);
@@ -3101,7 +3172,7 @@ function SellerDashboardContent() {
       setProductColors(fullProduct.colors_available || []);
       setColorStock(fullProduct.color_stock || {}); // Load color stock
       setBrand(fullProduct.brand || '');
-      setDeliveryOption(fullProduct.delivery_option || 'Meetup / Pickup');
+      setDeliveryOption(deliveryOptionToUi(fullProduct.delivery_option, fullProduct.category === 'Services'));
       setIsPreOrder(fullProduct.is_pre_order || false);
       setPreOrderDuration(fullProduct.pre_order_duration?.toString() || '');
       setPreOrderDurationUnit(fullProduct.pre_order_duration_unit || 'days');
@@ -3482,7 +3553,7 @@ function SellerDashboardContent() {
           color_stock: productColors.length > 0 ? Object.fromEntries(Object.entries(colorStock).filter(([_, v]) => parseInt(v as string) > 0)) : null,
           // FIX: Set empty color_media initially, will be updated after upload
           color_media: {},
-          delivery_option: deliveryOption,
+          delivery_option: normalizeDeliveryOptionForDb(deliveryOption, isService),
           is_pre_order: isService ? false : isPreOrder,
           pre_order_duration: isService || !isPreOrder ? null : parseInt(preOrderDuration),
           pre_order_duration_unit: isService || !isPreOrder ? null : preOrderDurationUnit,
@@ -3579,7 +3650,7 @@ function SellerDashboardContent() {
         color_stock: productColors.length > 0 ? Object.fromEntries(Object.entries(colorStock).filter(([_, v]) => parseInt(v as string) > 0)) : null,
         // FIX: Include color_media assignments
         color_media: colorMediaAssignments,
-        delivery_option: deliveryOption,
+        delivery_option: normalizeDeliveryOptionForDb(deliveryOption, isService),
         is_pre_order: isService ? false : isPreOrder,
         pre_order_duration: isService || !isPreOrder ? null : parseInt(preOrderDuration),
         pre_order_duration_unit: isService || !isPreOrder ? null : preOrderDurationUnit,
@@ -4076,7 +4147,7 @@ function SellerDashboardContent() {
                   <TouchableOpacity key={opt} style={styles.radioRow} onPress={() => setDeliveryOption(opt)}>
                     <Ionicons name={deliveryOption === opt ? "radio-button-on" : "radio-button-off"} size={24} color={deliveryOption === opt ? themeColors.primary : themeColors.textSecondary} />
                     <Text style={[styles.radioText, { color: themeColors.text }]}>
-                      {opt === 'Both' ? (isService ? 'Both (Remote & On-site)' : 'Both (Meetup / Pickup & Campus Delivery)') : opt}
+                      {opt === 'Both' ? (isService ? 'Both (Remote & On-site)' : 'Campus Delivery and Meetup / Pickup') : opt}
                     </Text>
                   </TouchableOpacity>
                 ))}
