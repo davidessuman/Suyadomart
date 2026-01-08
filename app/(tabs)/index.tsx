@@ -3172,6 +3172,7 @@ const FullImageViewer: React.FC<{
 }> = ({ isVisible, onClose, mediaUrls, initialIndex, theme }) => {
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
   const listRef = useRef<FlatList<any> | null>(null);
+  const videoRefs = useRef<Record<number, any>>({});
   const { width: winWidth, height: winHeight } = useWindowDimensions();
 
   useEffect(() => {
@@ -3180,6 +3181,17 @@ const FullImageViewer: React.FC<{
       setTimeout(() => listRef.current?.scrollToIndex({ index: initialIndex, animated: false }), 50);
     }
   }, [isVisible, initialIndex, mediaUrls]);
+
+  // Pause videos that are not currently visible
+  useEffect(() => {
+    Object.keys(videoRefs.current).forEach(key => {
+      const index = parseInt(key);
+      const videoRef = videoRefs.current[index];
+      if (videoRef && index !== currentIndex) {
+        videoRef.pauseAsync?.().catch(() => {});
+      }
+    });
+  }, [currentIndex]);
 
   if (!isVisible || !mediaUrls?.length) return null;
 
@@ -3208,6 +3220,10 @@ const FullImageViewer: React.FC<{
                 <View style={{ width: containerMaxWidth, height: containerMaxHeight, justifyContent: 'center', alignItems: 'center' }}>
                   {isVideo ? (
                     <Video
+                      ref={(ref) => {
+                        if (ref) videoRefs.current[index] = ref;
+                        else delete videoRefs.current[index];
+                      }}
                       source={{ uri: url }}
                       style={{ width: '100%', height: '100%' }}
                       resizeMode={ResizeMode.CONTAIN}

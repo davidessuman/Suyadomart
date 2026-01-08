@@ -1994,6 +1994,7 @@ const ProductMediaView = ({
           onMomentumScrollEnd={handleMomentumScrollEnd}
           scrollEventThrottle={16}
           keyExtractor={(_, i) => i.toString()}
+          style={{ width: containerWidth, alignSelf: 'center' }}
           renderItem={({ item: url, index }) => {
             const isVideo = isVideoUrl(url);
             
@@ -2192,68 +2193,65 @@ const FullImageViewer: React.FC<{
 }> = ({ isVisible, onClose, mediaUrls, initialIndex }) => {
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
   const listRef = useRef<FlatList<any> | null>(null);
-  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const videoRefs = useRef<Record<number, any>>({});
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  const formattedMedia = (mediaUrls || []).map(url =>
+    url?.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`
+  );
 
   useEffect(() => {
-    if (isVisible && initialIndex >= 0 && initialIndex < mediaUrls.length) {
+    if (isVisible && initialIndex >= 0 && initialIndex < formattedMedia.length) {
       setCurrentIndex(initialIndex);
-      setTimeout(() => {
-        listRef.current?.scrollToIndex({ index: initialIndex, animated: false });
-      }, 50);
+      setTimeout(() => listRef.current?.scrollToIndex({ index: initialIndex, animated: false }), 50);
     }
-  }, [isVisible, initialIndex, mediaUrls]);
+  }, [isVisible, initialIndex, formattedMedia.length]);
 
-  if (!isVisible || !mediaUrls?.length) return null;
+  // Pause videos that are not currently visible
+  useEffect(() => {
+    Object.keys(videoRefs.current).forEach(key => {
+      const index = parseInt(key);
+      const videoRef = videoRefs.current[index];
+      if (videoRef && index !== currentIndex) {
+        videoRef.pauseAsync?.().catch(() => {});
+      }
+    });
+  }, [currentIndex]);
+
+  if (!isVisible || !formattedMedia?.length) return null;
 
   return (
-    <Modal animationType="fade" transparent={true} visible={isVisible} onRequestClose={onClose}>
+    <Modal animationType="fade" transparent visible={isVisible} onRequestClose={onClose}>
       <StatusBar hidden />
       <View style={styles.fullViewerContainer}>
-        <TouchableOpacity 
-          style={styles.fullViewerCloseButton} 
-          onPress={onClose}
-        >
+        <TouchableOpacity style={styles.fullViewerCloseButton} onPress={onClose}>
           <Ionicons name="close" size={36} color="#fff" />
         </TouchableOpacity>
 
         <FlatList
           ref={listRef}
-          data={mediaUrls}
+          data={formattedMedia}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           keyExtractor={(_, i) => i.toString()}
-          getItemLayout={(_, i) => ({ length: winWidth, offset: winWidth * i, index: i })}
-          onMomentumScrollEnd={(e) => {
-            const newIndex = Math.round(e.nativeEvent.contentOffset.x / winWidth);
-            setCurrentIndex(newIndex);
-          }}
+          getItemLayout={(_, i) => ({ length: screenWidth, offset: screenWidth * i, index: i })}
+          onMomentumScrollEnd={(e) => setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / screenWidth))}
           renderItem={({ item: url, index }) => {
             const isVideo = isVideoUrl(url);
-            const videoUri = url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-            const containerMaxWidth = Math.min(winWidth * 0.95, 1200);
-            const containerMaxHeight = Math.min(winHeight * 0.95, 1200);
-            const isDesktop = winWidth >= 1024;
-            
+            const containerMaxWidth = Math.min(screenWidth * 0.9, 1200);
+            const containerMaxHeight = Math.min(screenHeight * 0.9, 1200);
+
             return (
-              <View style={[styles.fullViewerMediaSlide, { 
-                width: winWidth, 
-                alignSelf: 'center', 
-                backgroundColor: '#000', 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                paddingHorizontal: isDesktop ? 40 : 0,
-              }]}>
-                <View style={{ 
-                  width: containerMaxWidth, 
-                  height: containerMaxHeight, 
-                  justifyContent: 'center', 
-                  alignItems: 'center',
-                  alignSelf: 'center',
-                }}>
+              <View style={styles.fullViewerMediaSlide}> 
+                <View style={{ width: containerMaxWidth, height: containerMaxHeight, justifyContent: 'center', alignItems: 'center' }}>
                   {isVideo ? (
                     <Video
-                      source={{ uri: videoUri }}
+                      ref={(ref) => {
+                        if (ref) videoRefs.current[index] = ref;
+                        else delete videoRefs.current[index];
+                      }}
+                      source={{ uri: url }}
                       style={{ width: '100%', height: '100%' }}
                       resizeMode={ResizeMode.CONTAIN}
                       isLooping
@@ -2273,9 +2271,8 @@ const FullImageViewer: React.FC<{
           }}
         />
 
-        {/* Media counter */}
-        {mediaUrls.length > 1 && (
-          <Text style={styles.fullViewerPaginationText}>{currentIndex + 1} / {mediaUrls.length}</Text>
+        {formattedMedia.length > 1 && (
+          <Text style={styles.fullViewerPaginationText}>{currentIndex + 1} / {formattedMedia.length}</Text>
         )}
       </View>
     </Modal>
@@ -2458,6 +2455,7 @@ const getAvailableStock = () => {
                   <>
                     <Text style={[styles.modalOldPrice, { color: isDark ? '#bbb' : '#999' }]}>
                       GH₵ {Number(product.original_price).toFixed(2)}
+
                     </Text>
                     <View style={styles.modalDiscountBadge}>
                       <Text style={styles.modalDiscountText}>-{product.discountPercent}%</Text>
@@ -6395,12 +6393,10 @@ const styles = StyleSheet.create({
   fullViewerContainer: {
     flex: 1,
     backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   fullViewerCloseButton: {
     position: 'absolute',
-    top: 10,
+    top: 40,
     left: 20,
     zIndex: 10,
     padding: 10,
@@ -6409,7 +6405,7 @@ const styles = StyleSheet.create({
   },
   fullViewerMediaSlide: {
     width: width,
-    flex: 1,
+    height: height,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',

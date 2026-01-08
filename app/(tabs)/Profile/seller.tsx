@@ -4362,7 +4362,9 @@ const FullImageViewer: React.FC<{
 }> = ({ isVisible, onClose, mediaUrls, initialIndex }) => {
   const [currentIndex, setCurrentIndex] = useState(Math.max(0, initialIndex || 0));
   const listRef = useRef<FlatList<any> | null>(null);
+  const videoRefs = useRef<Record<number, any>>({});
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const screenWidth = Dimensions.get('window').width;
 
   useEffect(() => {
     if (isVisible && initialIndex >= 0 && initialIndex < (mediaUrls || []).length) {
@@ -4372,6 +4374,17 @@ const FullImageViewer: React.FC<{
       }, 50);
     }
   }, [isVisible, initialIndex, mediaUrls]);
+
+  // Pause videos that are not currently visible
+  useEffect(() => {
+    Object.keys(videoRefs.current).forEach(key => {
+      const index = parseInt(key);
+      const videoRef = videoRefs.current[index];
+      if (videoRef && index !== currentIndex) {
+        videoRef.pauseAsync?.().catch(() => {});
+      }
+    });
+  }, [currentIndex]);
 
   if (!isVisible || !mediaUrls?.length) return null;
 
@@ -4390,31 +4403,32 @@ const FullImageViewer: React.FC<{
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           keyExtractor={(_, i) => i.toString()}
-          getItemLayout={(_, i) => ({ length: winWidth, offset: winWidth * i, index: i })}
-          onMomentumScrollEnd={(e) => setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / winWidth))}
+          getItemLayout={(_, i) => ({ length: screenWidth, offset: screenWidth * i, index: i })}
+          onMomentumScrollEnd={(e) => setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / screenWidth))}
           renderItem={({ item: url, index }) => {
             const isVideo = url.toLowerCase().includes('.mp4');
             const videoUri = url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-            const containerMaxWidth = Math.min(winWidth * 0.95, 1200);
-            const containerMaxHeight = Math.min(winHeight * 0.95, 1200);
-            const isDesktop = winWidth >= 1024;
+            const containerMaxWidth = Math.min(winWidth * 0.9, 1000);
+            const containerMaxHeight = Math.min(winHeight * 0.9, 1000);
             
             return (
               <View style={[viewerStyles.fullViewerMediaSlide, { 
                 backgroundColor: '#000', 
                 justifyContent: 'center', 
                 alignItems: 'center',
-                paddingHorizontal: isDesktop ? 40 : 0,
               }]}>
                 <View style={{ 
                   width: containerMaxWidth, 
                   height: containerMaxHeight, 
                   justifyContent: 'center', 
                   alignItems: 'center',
-                  alignSelf: 'center',
                 }}>
                   {isVideo ? (
                     <Video
+                      ref={(ref) => {
+                        if (ref) videoRefs.current[index] = ref;
+                        else delete videoRefs.current[index];
+                      }}
                       source={{ uri: videoUri }}
                       style={{ width: '100%', height: '100%' }}
                       resizeMode={ResizeMode.CONTAIN}
@@ -4451,7 +4465,7 @@ const viewerStyles = StyleSheet.create({
   },
   fullViewerCloseButton: {
     position: 'absolute',
-    top: 10,
+    top: 40,
     left: 20,
     zIndex: 10,
     padding: 10,
@@ -4460,7 +4474,7 @@ const viewerStyles = StyleSheet.create({
   },
   fullViewerMediaSlide: {
     width: width,
-    flex: 1,
+    height: height,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',
@@ -4471,15 +4485,15 @@ const viewerStyles = StyleSheet.create({
   },
   fullViewerPaginationText: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 30,
     right: 20,
     backgroundColor: 'rgba(0,0,0,0.6)',
     color: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    fontSize: 14,
-    fontWeight: '500',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 10,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
