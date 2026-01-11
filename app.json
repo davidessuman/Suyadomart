@@ -1,6 +1,5 @@
 {
   "expo": {
-    "platforms": ["ios", "android", "web"],
     "name": "Suyado-campus",
     "slug": "Suyado-campus",
     "version": "1.0.0",
@@ -10,10 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-        "supportsTablet": true,
-        "infoPlist": {
-          "NSCalendarsUsageDescription": "This app needs calendar access to add event reminders."
-        }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {

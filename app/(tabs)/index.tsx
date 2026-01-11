@@ -885,87 +885,81 @@ const ContactSellerModal: React.FC<{
   const [error, setError] = useState<string>('');
   const [shopData, setShopData] = useState<any>(null);
   const sellerCacheRef = useRef<Map<string, any>>(new Map()); // Cache seller data by seller_id
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    const fetchSellerInfo = async () => {
-      if (!product || !product.seller_id) {
-        setError('No product or seller information available');
-        setLoading(false);
-        return;
-      }
-     
+    if (!isVisible) return;
+
+    const sellerId = product?.seller_id;
+    if (!product || !sellerId) {
+      setError('No product or seller information available');
+      setLoading(false);
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && requestId === requestIdRef.current;
+
+    (async () => {
       setLoading(true);
       setError('');
-      
+      setShopData(null);
+      setSellerPhone('');
+
       // Use immediate product data while fetching detailed shop info
       setSellerName(product.display_name || 'Seller');
       if (product.avatar_url) {
         setSellerAvatar(product.avatar_url);
       }
-      
+
       // Check cache first
-      const cached = sellerCacheRef.current.get(product.seller_id);
+      const cached = sellerCacheRef.current.get(sellerId);
       if (cached) {
-        setSellerPhone(cached.phone || '');
-        setSellerName(cached.name || product.display_name || 'Seller');
-        if (cached.avatar_url) {
-          const url = cached.avatar_url.startsWith('http')
-            ? cached.avatar_url
-            : `${SUPABASE_URL}/storage/v1/object/public/avatars/${cached.avatar_url}`;
-          setSellerAvatar(url);
+        if (isCurrent()) {
+          setSellerPhone(cached.phone || '');
+          setSellerName(cached.name || product.display_name || 'Seller');
+          if (cached.avatar_url) {
+            const url = cached.avatar_url.startsWith('http')
+              ? cached.avatar_url
+              : `${SUPABASE_URL}/storage/v1/object/public/avatars/${cached.avatar_url}`;
+            setSellerAvatar(url);
+          }
+          setShopData(cached.shopData);
+          setLoading(false);
         }
-        setShopData(cached.shopData);
-        setLoading(false);
         return;
       }
-      
-      try {
-        // Fetch shop and user profile in parallel with 3 second timeout
-        let shopData = null;
-        let userData = null;
-        let timedOut = false;
-        
-        const timeoutPromise = new Promise<null>(resolve => {
-          setTimeout(() => {
-            timedOut = true;
-            resolve(null);
-          }, 3000); // 3 second timeout
-        });
 
-        // Create race between queries and timeout
-        const queryPromise = Promise.all([
+      try {
+        const [{ data: sd }, { data: ud }] = await Promise.all([
           supabase
             .from('shops')
             .select('phone, name, avatar_url, location, description')
-            .eq('owner_id', product.seller_id)
+            .eq('owner_id', sellerId)
             .maybeSingle(),
           supabase
             .from('user_profiles')
             .select('full_name, avatar_url')
-            .eq('id', product.seller_id)
+            .eq('id', sellerId)
             .maybeSingle()
         ]);
 
-        const result = await Promise.race<any>([queryPromise, timeoutPromise]);
-        
-        if (result && !timedOut) {
-          const [{ data: sd }, { data: ud }] = result;
-          shopData = sd;
-          userData = ud;
-        }
+        if (!isCurrent()) return;
 
-        // Use shop data if available, otherwise use user profile
+        const shopData = sd;
+        const userData = ud;
+
         if (shopData) {
-          // Cache the data
-          sellerCacheRef.current.set(product.seller_id, {
+          sellerCacheRef.current.set(sellerId, {
             ...shopData,
             shopData: shopData
           });
-          
+
           setShopData(shopData);
           setSellerPhone(shopData.phone || '');
           setSellerName(shopData.name || product.display_name || 'Seller');
-          
+
           if (shopData.avatar_url) {
             const url = shopData.avatar_url.startsWith('http')
               ? shopData.avatar_url
@@ -978,16 +972,15 @@ const ContactSellerModal: React.FC<{
             setSellerAvatar(url);
           }
         } else if (userData) {
-          // Cache user profile
-          sellerCacheRef.current.set(product.seller_id, {
+          sellerCacheRef.current.set(sellerId, {
             ...userData,
             shopData: null
           });
-          
+
           setSellerName(userData.full_name || product.display_name || 'Seller');
           setSellerPhone('');
           setShopData(null);
-          
+
           if (userData.avatar_url) {
             const url = userData.avatar_url.startsWith('http')
               ? userData.avatar_url
@@ -995,19 +988,19 @@ const ContactSellerModal: React.FC<{
             setSellerAvatar(url);
           }
         }
-       
       } catch (error: any) {
         console.error('Error fetching seller info:', error);
-        // Keep using the immediate data even if detailed fetch fails
       } finally {
-        setLoading(false);
+        if (isCurrent()) {
+          setLoading(false);
+        }
       }
-    };
+    })();
 
-    if (isVisible && product) {
-      fetchSellerInfo();
-    }
-  }, [isVisible, product]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isVisible, product?.seller_id]);
 
   const handleWhatsApp = () => {
     if (!sellerPhone || !product) {
@@ -4931,6 +4924,7 @@ const ProductDetailModal: React.FC<{
   const [loadingProductDetails, setLoadingProductDetails] = useState(false);
   const [colorSpecificMedia, setColorSpecificMedia] = useState<string[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const sellerInfoRequestIdRef = useRef(0);
   const { width } = useWindowDimensions();
     // Update colorSpecificMedia when selectedColor or fullProductData changes
     useEffect(() => {
@@ -5001,52 +4995,63 @@ const ProductDetailModal: React.FC<{
   };
 
   useEffect(() => {
+    if (!isVisible || !product) return;
+
+    const requestId = ++sellerInfoRequestIdRef.current;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && requestId === sellerInfoRequestIdRef.current;
+
     const fetchSellerInfo = async () => {
-      if (!product) return;
-      
       if (!product.display_name || !product.avatar_url || !product.university) {
         setLoadingSeller(true);
         try {
-          const { data: shopData } = await supabase
-            .from('shops')
-            .select('name, avatar_url')
-            .eq('owner_id', product.seller_id)
-            .single();
+          const [{ data: shopData }, { data: profileData }] = await Promise.all([
+            supabase
+              .from('shops')
+              .select('name, avatar_url')
+              .eq('owner_id', product.seller_id)
+              .maybeSingle(),
+            supabase
+              .from('user_profiles')
+              .select('full_name, avatar_url, university')
+              .eq('id', product.seller_id)
+              .maybeSingle()
+          ]);
 
-          const { data: profileData } = await supabase
-            .from('user_profiles')
-            .select('full_name, avatar_url, university')
-            .eq('id', product.seller_id)
-            .single();
+          if (!isCurrent()) return;
 
           const updatedProduct = {
             ...product,
             display_name: shopData?.name || profileData?.full_name || 'Seller',
-            avatar_url: shopData?.avatar_url || profileData?.avatar_url || 
+            avatar_url: shopData?.avatar_url || profileData?.avatar_url ||
               `https://ui-avatars.com/api/?name=${encodeURIComponent(shopData?.name || profileData?.full_name || 'Seller')}&background=FF9900&color=fff`,
             university: profileData?.university || 'Campus',
           };
-          
+
           setProductWithSeller(updatedProduct);
         } catch (error) {
           console.error('Error fetching seller info:', error);
+          if (!isCurrent()) return;
           setProductWithSeller({
             ...product,
             display_name: product.display_name || 'Seller',
-            avatar_url: product.avatar_url || 
+            avatar_url: product.avatar_url ||
               `https://ui-avatars.com/api/?name=${encodeURIComponent(product.title || 'Product')}&background=FF9900&color=fff`,
             university: product.university || 'Campus',
           });
         } finally {
-          setLoadingSeller(false);
+          if (isCurrent()) {
+            setLoadingSeller(false);
+          }
         }
       } else {
-        setProductWithSeller(product);
+        if (isCurrent()) {
+          setProductWithSeller(product);
+        }
       }
     };
 
-    if (isVisible && product) {
-      fetchSellerInfo();
+    fetchSellerInfo();
       fetchFullProductData(product.id);
       setCurrentMediaIndex(0);
       setSelectedColor('');
@@ -5058,7 +5063,9 @@ const ProductDetailModal: React.FC<{
         setCurrentUserId(data?.user?.id ?? null);
       };
       fetchUserId();
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [isVisible, product]);
 
   const handleAddToCart = async () => {
@@ -6448,6 +6455,7 @@ export default function BuyerScreen() {
   const [isCartOrder, setIsCartOrder] = useState(false);
   const [ordersModalVisible, setOrdersModalVisible] = useState(false);
   const [contactSellerVisible, setContactSellerVisible] = useState(false);
+  const [contactSellerProduct, setContactSellerProduct] = useState<Product | null>(null);
   
   const [orderProductModalVisible, setOrderProductModalVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
@@ -6722,6 +6730,7 @@ export default function BuyerScreen() {
   
   const openContactSeller = () => {
     if (!selectedProduct) return;
+    setContactSellerProduct(selectedProduct);
     setContactSellerVisible(true);
     setModalVisible(false);
   };
@@ -8207,6 +8216,9 @@ export default function BuyerScreen() {
         order={selectedOrder}
         onOpenFullViewer={setFullViewerIndex}
         onContactSeller={() => {
+          if (selectedOrderProduct) {
+            setContactSellerProduct(selectedOrderProduct);
+          }
           setOrderProductModalVisible(false);
           setContactSellerVisible(true);
         }}
@@ -8233,7 +8245,7 @@ export default function BuyerScreen() {
             setModalVisible(true);
           }
         }}
-        product={selectedProduct}
+        product={contactSellerProduct}
         order={selectedOrder}
         onReopenProductModal={() => {
           if (selectedOrder) {

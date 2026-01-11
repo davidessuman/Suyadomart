@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { AppAlertProvider } from './AppAlertProvider';
-import { CartProvider } from './cart/CartProvider';
 import {
   DarkTheme,
   DefaultTheme,
@@ -73,15 +71,9 @@ export default function RootLayout() {
       const inAuth = segments[0] === 'auth';
       const inTabs = segments[0] === '(tabs)';
       const otpPending = await AsyncStorage.getItem('otp_pending');
-      const passwordResetFlow = await AsyncStorage.getItem('password_reset_flow');
 
       // 1. Authenticated User
       if (session) {
-        // Don't auto-redirect if in password reset flow
-        if (passwordResetFlow === 'true') {
-          if (!inAuth) router.replace('/auth');
-          return;
-        }
         if (otpPending === 'true') {
           if (!inAuth) router.replace('/auth');
           return;
@@ -124,19 +116,15 @@ export default function RootLayout() {
   }
 
   return (
-    <AppAlertProvider>
-      <CartProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </CartProvider>
-    </AppAlertProvider>
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+      </Stack>
+      <StatusBar style="auto" />
+    </ThemeProvider>
   );
 }
 

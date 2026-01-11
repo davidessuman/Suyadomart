@@ -454,36 +454,56 @@ const ContactSellerModal: React.FC<{
   const [loading, setLoading] = useState(true);
   const [sellerName, setSellerName] = useState<string>('');
   const colorScheme = useColorScheme();
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    const fetchSellerInfo = async () => {
-      if (!product) return;
-      
+    if (!isVisible) return;
+
+    const sellerId = product?.seller_id;
+    if (!product || !sellerId) {
+      setSellerPhone('');
+      setSellerName('Seller');
+      setLoading(false);
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && requestId === requestIdRef.current;
+
+    (async () => {
       setLoading(true);
+      setSellerPhone('');
+      setSellerName(product.display_name || 'Seller');
+
       try {
         const { data: shopData, error } = await supabase
           .from('shops')
           .select('phone, name')
-          .eq('owner_id', product.seller_id)
-          .single();
+          .eq('owner_id', sellerId)
+          .maybeSingle();
 
+        if (!isCurrent()) return;
         if (error) throw error;
-        
+
         setSellerPhone(shopData?.phone || '');
         setSellerName(shopData?.name || product.display_name || 'Seller');
-        
       } catch (error) {
         console.error('Error fetching seller info:', error);
-        showAlert('Error', 'Could not fetch seller contact information');
+        if (isCurrent()) {
+          showAlert('Error', 'Could not fetch seller contact information');
+        }
       } finally {
-        setLoading(false);
+        if (isCurrent()) {
+          setLoading(false);
+        }
       }
-    };
+    })();
 
-    if (isVisible && product) {
-      fetchSellerInfo();
-    }
-  }, [isVisible, product]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isVisible, product?.seller_id]);
 
   const handleWhatsApp = () => {
     if (!sellerPhone || !product) {
