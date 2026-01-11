@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
-import * as ExpoCalendar from 'expo-calendar';
+import { ExpoCalendar } from '@/lib/expoCalendar';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';
 import 'react-native-get-random-values';
@@ -1643,7 +1643,7 @@ export default function EventsScreen() {
   const [showAnnouncementDatePicker, setShowAnnouncementDatePicker] = useState(false);
   const [showAnnouncementCalendar, setShowAnnouncementCalendar] = useState(false);
   const [selectedAnnouncementDates, setSelectedAnnouncementDates] = useState<string[]>([getTodayUTC()]);
-  const [announcementDayDetails, setAnnouncementDayDetails] = useState<Record<string, { time: string }>>({});
+  const [announcementDayDetails, setAnnouncementDayDetails] = useState<Record<string, { fromTime?: string; toTime?: string }>>({});
   const [showAnnouncementDayEditor, setShowAnnouncementDayEditor] = useState(false);
   const [editingAnnouncementDayIndex, setEditingAnnouncementDayIndex] = useState(0);
   const [editingAnnouncementDayDate, setEditingAnnouncementDayDate] = useState('');
@@ -1687,6 +1687,7 @@ export default function EventsScreen() {
     priority: 'Not Urgent' as 'Not Urgent' | 'Urgent',
     image: '',
     hasDateTime: false,
+    date: getTodayUTC(),
     fromTime: '12:00 PM',
     toTime: '01:00 PM',
   });
@@ -2147,6 +2148,7 @@ export default function EventsScreen() {
 
   const editAnnouncement = (announcement: any) => {
     setSelectedAnnouncement(announcement);
+    const dates = announcement.announcement_dates ? JSON.parse(announcement.announcement_dates) : [getTodayUTC()];
     setAnnouncementData({
       title: announcement.title,
       announcedFor: announcement.announced_for,
@@ -2155,12 +2157,14 @@ export default function EventsScreen() {
       priority: announcement.priority as 'Not Urgent' | 'Urgent',
       image: announcement.image_url || '',
       hasDateTime: announcement.has_date_time,
+      date: dates?.[0] ?? getTodayUTC(),
       fromTime: announcement.from_time || '12:00 PM',
       toTime: announcement.to_time || '01:00 PM',
     });
-    const dates = announcement.announcement_dates ? JSON.parse(announcement.announcement_dates) : [getTodayUTC()];
     setSelectedAnnouncementDates(dates);
-    const dayTimes = announcement.per_day_times ? JSON.parse(announcement.per_day_times) : {};
+    const dayTimes = announcement.per_day_times
+      ? (JSON.parse(announcement.per_day_times) as Record<string, { fromTime?: string; toTime?: string }> )
+      : {};
     setAnnouncementDayDetails(dayTimes);
     setShowUserAnnouncements(false);
     setIsAnnouncementModalVisible(true);
@@ -2221,6 +2225,7 @@ export default function EventsScreen() {
         priority: 'Not Urgent',
         image: '',
         hasDateTime: false,
+        date: getTodayUTC(),
         fromTime: '12:00 PM',
         toTime: '01:00 PM',
       });
@@ -2564,6 +2569,10 @@ export default function EventsScreen() {
       }
 
       // iOS (and Android fallback): create the event directly using Expo Calendar
+      if (!ExpoCalendar) {
+        showAlert('Not Supported', 'Adding reminders to your calendar is not available on the web.');
+        return;
+      }
       const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
       if (status !== 'granted') {
         showAlert('Permission Required', 'Please allow calendar access to add this reminder.');
@@ -3970,7 +3979,7 @@ export default function EventsScreen() {
       {isSearchActive && searchQuery && (
         <View style={styles.searchResultsHeader}>
           <Text style={[styles.searchResultsText, { color: colors.text }]}>
-            Search results for "{searchQuery}" • {feedView === 'events' ? searchedEvents.length : filteredAnnouncements.length} {feedView === 'events' ? 'event' : 'announcement'}{(feedView === 'events' ? searchedEvents.length : filteredAnnouncements.length) !== 1 ? 's' : ''} found
+            Search results for &quot;{searchQuery}&quot; • {feedView === 'events' ? searchedEvents.length : filteredAnnouncements.length} {feedView === 'events' ? 'event' : 'announcement'}{(feedView === 'events' ? searchedEvents.length : filteredAnnouncements.length) !== 1 ? 's' : ''} found
           </Text>
           <TouchableOpacity onPress={handleClearSearch} style={styles.clearSearchResultsButton}>
             <Text style={[styles.clearSearchResultsText, { color: colors.primary }]}>Clear</Text>
@@ -4003,8 +4012,10 @@ export default function EventsScreen() {
               style={styles.adBgImage} 
               blurRadius={8}
             />
-            <View style={[styles.adBgOverlay, { 
-              background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)',
+            <View style={[styles.adBgOverlay, {
+              ...(Platform.OS === 'web'
+                ? ({ backgroundImage: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)' } as any)
+                : {}),
               backgroundColor: 'rgba(0,0,0,0.6)',
             }]} />
             <View style={styles.adContent}>
@@ -4061,14 +4072,18 @@ export default function EventsScreen() {
                     <>
                       <Image source={{ uri: event.flyer }} style={styles.adBgImage} blurRadius={14} />
                       <View style={[styles.adBgOverlay, { 
-                        background: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)`,
+                        ...(Platform.OS === 'web'
+                          ? ({ backgroundImage: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)` } as any)
+                          : {}),
                         backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
                       }]} />
                     </>
                   ) : (
                     <>
                       <View style={[styles.adBgOverlay, { 
-                        background: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)`,
+                        ...(Platform.OS === 'web'
+                          ? ({ backgroundImage: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)` } as any)
+                          : {}),
                         backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
                       }]} />
                       <View style={styles.adPatternOverlay}>
@@ -4112,7 +4127,9 @@ export default function EventsScreen() {
           }
 
           const announcement = current.data;
-          const announcementIndex = announcement?.id ? announcement.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
+          const announcementIndex = announcement?.id
+            ? announcement.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)
+            : 0;
           return (
             <TouchableOpacity 
               onPress={() => {
@@ -4134,8 +4151,10 @@ export default function EventsScreen() {
                   style={styles.adBgImage} 
                   blurRadius={8}
                 />
-                <View style={[styles.adBgOverlay, { 
-                  background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)',
+                <View style={[styles.adBgOverlay, {
+                  ...(Platform.OS === 'web'
+                    ? ({ backgroundImage: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)' } as any)
+                    : {}),
                   backgroundColor: 'rgba(0,0,0,0.6)',
                 }]} />
                 <View style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
@@ -4240,7 +4259,7 @@ export default function EventsScreen() {
         <View style={styles.emptyContainer}>
           {isSearchActive ? (
             <>
-              <Text style={[styles.emptyText, { color: colors.text }]}>No {feedView} found for "{searchQuery}"</Text>
+              <Text style={[styles.emptyText, { color: colors.text }]}>No {feedView} found for &quot;{searchQuery}&quot;</Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try a different search term</Text>
             </>
           ) : (
@@ -5420,6 +5439,7 @@ export default function EventsScreen() {
                   priority: 'Not Urgent',
                   image: '',
                   hasDateTime: false,
+                  date: getTodayUTC(),
                   fromTime: '12:00 PM',
                   toTime: '01:00 PM',
                 });
@@ -5744,6 +5764,7 @@ export default function EventsScreen() {
                       priority: 'Not Urgent',
                       image: '',
                       hasDateTime: false,
+                      date: getTodayUTC(),
                       fromTime: '12:00 PM',
                       toTime: '01:00 PM',
                     });
@@ -5898,6 +5919,7 @@ export default function EventsScreen() {
               minDate={getTodayUTC()}
               onDayPress={(day: DateData) => {
                 setAnnouncementData({ ...announcementData, date: day.dateString });
+                setSelectedAnnouncementDates([day.dateString]);
                 setShowAnnouncementDatePicker(false);
               }}
               markedDates={{
@@ -7330,6 +7352,9 @@ const createStyles = (colors: typeof LIGHT_COLORS) => StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
+  },
+  eventDetailsActionButtonIcon: {
+    fontSize: 16,
   },
   eventDetailsActionButtonText: {
     fontSize: 14,
