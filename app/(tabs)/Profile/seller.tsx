@@ -177,7 +177,8 @@ const categoryStructure = {
   Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
   Sports: ['Gym Wear', 'Jersey', 'Equipment', 'Footwear', 'Accessories'],
   Books: ['Textbooks', 'Novels', 'Magazines', 'Comics'],
-  Food: ['Snacks', 'Drinks', 'Homemade Meals'],
+  Food: ['Snacks', 'Drinks', 'Fast Food', 'Homemade Meals'],
+  Glossary: ['Ingredients', 'Spices & Herbs', 'Condiments & Sauces', 'Packaged Food Products', 'Other Glossary'],
   Services: ['Tutoring', 'Photography', 'Graphic Design', 'Writing', 'Delivery', 'Repair', 'Fitness Training', 'Catering', 'Beauty Services', 'Other Services'],
   Other: ['Everything else'],
 };
@@ -3452,7 +3453,7 @@ function SellerDashboardContent() {
           return;
         }
         
-        if (!requiresSizes && mainCategory !== 'Services' && productColors.length === 0 && (!generalStock || parseInt(generalStock) <= 0)) {
+        if (!requiresSizes && productColors.length === 0 && (!generalStock || parseInt(generalStock) <= 0)) {
           showAlert({
             title: 'Required',
             message: 'Please enter available stock quantity',

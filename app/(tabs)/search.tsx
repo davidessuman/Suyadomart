@@ -51,7 +51,8 @@ const categoryStructure = {
   Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
   Sports: ['Gym Wear', 'Jersey', 'Equipment', 'Footwear', 'Accessories'],
   Books: ['Textbooks', 'Novels', 'Magazines', 'Comics'],
-  Food: ['Snacks', 'Drinks', 'Homemade Meals'],
+  Food: ['Snacks', 'Drinks', 'Fast Food', 'Homemade Meals'],
+  Glossary: ['Ingredients', 'Spices & Herbs', 'Condiments & Sauces', 'Packaged Food Products', 'Other Glossary'],
   Services: [
     'Tutoring',
     'Photography',
@@ -174,7 +175,7 @@ interface OrderFormData {
   fullName: string;
   phoneNumber: string;
   location: string;
-  deliveryOption: 'Meet/pickup' | 'Campus delivery';
+  deliveryOption: 'Meetup / Pickup' | 'Campus Delivery';
   additionalNotes?: string;
   selectedColor?: string;
   selectedSize?: string;
@@ -1072,7 +1073,7 @@ const OrderFormModal: React.FC<{
     fullName: '',
     phoneNumber: '',
     location: '',
-    deliveryOption: 'Meet/pickup',
+    deliveryOption: 'Meetup / Pickup',
     additionalNotes: '',
     selectedColor: undefined,
     selectedSize: undefined,
@@ -1089,7 +1090,7 @@ const OrderFormModal: React.FC<{
         fullName: '',
         phoneNumber: '',
         location: '',
-        deliveryOption: 'Meet/pickup',
+        deliveryOption: 'Meetup / Pickup',
         additionalNotes: '',
         selectedColor: undefined,
         selectedSize: undefined,
@@ -1320,16 +1321,16 @@ const OrderFormModal: React.FC<{
               <TouchableOpacity
                 style={[
                   styles.deliveryOption,
-                  orderData.deliveryOption === 'Campus delivery' && styles.deliveryOptionSelected,
+                  orderData.deliveryOption === 'Campus Delivery' && styles.deliveryOptionSelected,
                   { 
                     backgroundColor: cardBackground,
-                    borderColor: orderData.deliveryOption === 'Campus delivery' ? PRIMARY_COLOR : borderColor 
+                    borderColor: orderData.deliveryOption === 'Campus Delivery' ? PRIMARY_COLOR : borderColor 
                   }
                 ]}
-                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'Campus delivery' }))}
+                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'Campus Delivery' }))}
               >
                 <View style={styles.deliveryOptionRadio}>
-                  {orderData.deliveryOption === 'Campus delivery' && (
+                  {orderData.deliveryOption === 'Campus Delivery' && (
                     <View style={styles.deliveryOptionRadioSelected} />
                   )}
                 </View>
@@ -1347,23 +1348,23 @@ const OrderFormModal: React.FC<{
               <TouchableOpacity
                 style={[
                   styles.deliveryOption,
-                  orderData.deliveryOption === 'Meet/pickup' && styles.deliveryOptionSelected,
+                  orderData.deliveryOption === 'Meetup / Pickup' && styles.deliveryOptionSelected,
                   { 
                     backgroundColor: cardBackground,
-                    borderColor: orderData.deliveryOption === 'Meet/pickup' ? PRIMARY_COLOR : borderColor 
+                    borderColor: orderData.deliveryOption === 'Meetup / Pickup' ? PRIMARY_COLOR : borderColor 
                   }
                 ]}
-                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'Meet/pickup' }))}
+                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'Meetup / Pickup' }))}
               >
                 <View style={styles.deliveryOptionRadio}>
-                  {orderData.deliveryOption === 'Meet/pickup' && (
+                  {orderData.deliveryOption === 'Meetup / Pickup' && (
                     <View style={styles.deliveryOptionRadioSelected} />
                   )}
                 </View>
                 <View style={styles.deliveryOptionContent}>
                   <Ionicons name="storefront" size={24} color={PRIMARY_COLOR} />
                   <View style={styles.deliveryOptionText}>
-                    <Text style={[styles.deliveryOptionTitle, { color: textColor }]}>Meet/Pickup</Text>
+                    <Text style={[styles.deliveryOptionTitle, { color: textColor }]}>Meetup / Pickup</Text>
                     <Text style={[styles.deliveryOptionDescription, { color: isDark ? '#aaa' : '#666' }]}>
                       Pick up product from seller's location
                     </Text>
@@ -2309,7 +2310,10 @@ const formatDeliveryOption = (option: string): string => {
     'Remote': 'Remote Service',
     'On-site': 'On-site Service',
     // Legacy values for backward compatibility
+    'Meet/pickup': 'Meetup / Pickup',
+    'Campus delivery': 'Campus Delivery',
     'pickup': 'Meetup / Pickup',
+    'delivery': 'Campus Delivery',
     'campus delivery': 'Campus Delivery',
     'both': 'Campus Delivery and Meetup / Pickup',
     'remote': 'Remote Service',
@@ -2891,6 +2895,7 @@ const getCategoryIcon = (category: string) => {
     'home': 'home-outline',
     'sports': 'basketball-outline',
     'books': 'book-outline',
+    'glossary': 'book-outline',
     'food': 'fast-food-outline',
     'services': 'construct-outline',
     'academics': 'school-outline',
@@ -2927,6 +2932,80 @@ const getServiceSubCategoryIcon = (subCategory: string) => {
 
   const key = subCategory.toLowerCase();
   return iconMap[key] || 'briefcase-outline';
+};
+
+// Helper function to get icons for product sub-categories
+const getProductSubCategoryIcon = (mainCategory: string, subCategory: string) => {
+  const map: Record<string, Record<string, string>> = {
+    Fashion: {
+      'Dresses': 'rose-outline',
+      'Tops & Shirts': 'shirt-outline',
+      'Pants & Jeans': 'walk-outline',
+      'Skirts': 'woman-outline',
+      'Jackets': 'shield-outline',
+      'Footwear': 'footsteps-outline',
+      'Bags': 'bag-handle-outline',
+      'Watches': 'watch-outline',
+      'Jewelry': 'diamond-outline',
+      'Accessories': 'glasses-outline',
+      'Other Fashion': 'ellipsis-horizontal-outline',
+    },
+    Electronics: {
+      'Phones': 'phone-portrait-outline',
+      'Laptops': 'laptop-outline',
+      'Tablets': 'tablet-portrait-outline',
+      'Headphones': 'headset-outline',
+      'Chargers': 'battery-charging-outline',
+      'Gaming': 'game-controller-outline',
+      'Accessories': 'hardware-chip-outline',
+      'Other Electronics': 'ellipsis-vertical-outline',
+    },
+    Beauty: {
+      'Skincare': 'body-outline',
+      'Makeup': 'brush-outline',
+      'Hair Care': 'cut-outline',
+      'Fragrance': 'flask-outline',
+      'Tools': 'hammer-outline',
+    },
+    Home: {
+      'Furniture': 'bed-outline',
+      'Decor': 'color-palette-outline',
+      'Kitchen': 'restaurant-outline',
+      'Bedding': 'layers-outline',
+      'Appliances': 'flash-outline',
+    },
+    Sports: {
+      'Gym Wear': 'fitness-outline',
+      'Jersey': 'football-outline',
+      'Equipment': 'basketball-outline',
+      'Footwear': 'tennisball-outline',
+      'Accessories': 'medal-outline',
+    },
+    Books: {
+      'Textbooks': 'school-outline',
+      'Novels': 'book-outline',
+      'Magazines': 'newspaper-outline',
+      'Comics': 'happy-outline',
+    },
+    Food: {
+      'Snacks': 'ice-cream-outline',
+      'Drinks': 'cafe-outline',
+      'Fast Food': 'fast-food-outline',
+      'Homemade Meals': 'nutrition-outline',
+    },
+    Glossary: {
+      'Ingredients': 'leaf-outline',
+      'Spices & Herbs': 'flower-outline',
+      'Condiments & Sauces': 'water-outline',
+      'Packaged Food Products': 'cube-outline',
+      'Other Glossary': 'list-outline',
+    },
+    Other: {
+      'Everything else': 'apps-outline',
+    },
+  };
+
+  return map[mainCategory]?.[subCategory] || 'pricetag-outline';
 };
 
 // Helper function to get icons for Beauty Services tertiary types
@@ -2996,7 +3075,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
   };
 
   // Group categories by type
-  const productCategories = ['Fashion', 'Electronics', 'Beauty', 'Home', 'Sports', 'Books', 'Food', 'Other'];
+  const productCategories = ['Fashion', 'Electronics', 'Beauty', 'Home', 'Sports', 'Books', 'Food', 'Glossary', 'Other'];
   const serviceCategories = [
     'Tutoring',
     'Photography',
@@ -3174,7 +3253,7 @@ const ProfessionalCategoriesDrawer: React.FC<{
                                 >
                                   <View style={[styles.drawerItemIconContainer, isSubSelected && styles.drawerItemIconActive]}>
                                     <Ionicons 
-                                      name="pricetag-outline" 
+                                      name={getProductSubCategoryIcon(category, subCategory)}
                                       size={16} 
                                       color={isSubSelected ? PRIMARY_COLOR : textColor} 
                                     />
@@ -4551,7 +4630,7 @@ export default function SearchScreen() {
             buyer_name: orderData.fullName,
             phone_number: `+233${orderData.phoneNumber}`,
             location: orderData.location,
-            delivery_option: orderData.deliveryOption,
+            delivery_option: formatDeliveryOption(orderData.deliveryOption),
             additional_notes: orderData.additionalNotes || '',
             total_amount: orderForProduct.price * (orderData.quantity || 1),
             status: 'pending',
@@ -4599,7 +4678,7 @@ export default function SearchScreen() {
           buyer_name: orderData.fullName,
           buyer_phone: `+233${orderData.phoneNumber}`,
           total_amount: orderForProduct.price * (orderData.quantity || 1),
-          delivery_option: orderData.deliveryOption,
+          delivery_option: formatDeliveryOption(orderData.deliveryOption),
           location: orderData.location,
           selected_color: orderData.selectedColor,
           selected_size: orderData.selectedSize,
@@ -4652,7 +4731,7 @@ export default function SearchScreen() {
               buyer_name: orderData.fullName,
               phone_number: `+233${orderData.phoneNumber}`,
               location: orderData.location,
-              delivery_option: orderData.deliveryOption,
+              delivery_option: formatDeliveryOption(orderData.deliveryOption),
               additional_notes: orderData.additionalNotes || '',
               total_amount: sellerTotal,
               status: 'pending',
@@ -4699,7 +4778,7 @@ export default function SearchScreen() {
             buyer_name: orderData.fullName,
             buyer_phone: `+233${orderData.phoneNumber}`,
             total_amount: sellerTotal,
-            delivery_option: orderData.deliveryOption,
+            delivery_option: formatDeliveryOption(orderData.deliveryOption),
             location: orderData.location,
           });
         }

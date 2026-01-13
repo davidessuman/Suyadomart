@@ -143,7 +143,7 @@ interface OrderFormData {
   fullName: string;
   phoneNumber: string;
   location: string;
-  deliveryOption: 'pickup' | 'delivery';
+  deliveryOption: 'Meetup / Pickup' | 'Campus Delivery';
   additionalNotes?: string;
   selectedColor?: string | null;
   selectedSize?: string | null;
@@ -203,6 +203,7 @@ const formatDeliveryOption = (option?: string): string => {
     'On-site': 'On-site Service',
     // Legacy values for backward compatibility
     'pickup': 'Meetup / Pickup',
+    'delivery': 'Campus Delivery',
     'campus delivery': 'Campus Delivery',
     'both': 'Meetup / Pickup & Campus Delivery',
     'remote': 'Remote Service',
@@ -1039,7 +1040,7 @@ const ContactSellerModal: React.FC<{
                 `📝 *My Name*: ${order.buyer_name}\n` +
                 `📞 *My Phone*: ${order.phone_number}\n` +
                 `📍 *Location*: ${order.location}\n` +
-                `🚚 *Delivery*: ${order.delivery_option === 'delivery' ? 'Delivery' : 'Pickup'}\n\n` +
+                `🚚 *Delivery*: ${formatDeliveryOption(order.delivery_option)}\n\n` +
                 `I'd like to discuss my order.`;
     } else {
       const productDescription = product.description || product.title || 'Check out this product';
@@ -1558,7 +1559,6 @@ const OrderProductDetailModal: React.FC<{
   const [fullProductData, setFullProductData] = useState<any>(null);
   const [colorSpecificMedia, setColorSpecificMedia] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const { width } = useWindowDimensions();
   
   // Calculate dimensions for desktop centering
@@ -1598,41 +1598,16 @@ useEffect(() => {
           });
           setColorSpecificMedia(formattedMedia);
         } else {
-          // Fall back to general media URLs
-          const generalMedia = data.media_urls || [];
-          const formattedMedia = generalMedia.map((url: string) => {
-            if (url.startsWith('http')) {
-              return url;
-            } else {
-              return `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-            }
-          });
-          setColorSpecificMedia(formattedMedia);
+          // No color-specific media for this color
+          setColorSpecificMedia([]);
         }
       } else {
-        // No color selected, use general media
-        const generalMedia = data?.media_urls || product.media_urls || [];
-        const formattedMedia = generalMedia.map((url: string) => {
-          if (url.startsWith('http')) {
-            return url;
-          } else {
-            return `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-          }
-        });
-        setColorSpecificMedia(formattedMedia);
+        // No color selected or no color_media mapping
+        setColorSpecificMedia([]);
       }
     } catch (error) {
       console.error('Error fetching product details:', error);
-      // Fallback to product's media_urls
-      const generalMedia = product.media_urls || [];
-      const formattedMedia = generalMedia.map((url: string) => {
-        if (url.startsWith('http')) {
-          return url;
-        } else {
-          return `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-        }
-      });
-      setColorSpecificMedia(formattedMedia);
+      setColorSpecificMedia([]);
     } finally {
       setLoading(false);
     }
@@ -1685,15 +1660,6 @@ useEffect(() => {
   };
 
   // Helper function to check if media URL is color-specific
-  const isColorSpecificMedia = (mediaUrl: string) => {
-    if (!order?.selected_color || !fullProductData?.color_media) return false;
-    const colorMedia = fullProductData.color_media[order.selected_color] || [];
-    return colorMedia.some((url: string) => {
-      const fullUrl = url.startsWith('http') ? url : `${SUPABASE_URL}/storage/v1/object/public/products/${url}`;
-      return fullUrl === mediaUrl;
-    });
-  };
-
   // Format media URLs for display
   const formatMediaUrls = (urls: string[]) => {
     return urls.map(url => {
@@ -1707,8 +1673,14 @@ useEffect(() => {
 
   if (!product || !order) return null;
 
-  // Determine which media to display
-  const displayMedia = colorSpecificMedia.length > 0 ? colorSpecificMedia : formatMediaUrls(product.media_urls || []);
+  // Determine which single image to display (always show one image in ordered product details)
+  const generalMedia = formatMediaUrls((fullProductData?.media_urls || product.media_urls || []) as string[]);
+  const preferredPool = colorSpecificMedia.length > 0 ? colorSpecificMedia : generalMedia;
+  const coverImageUrl =
+    preferredPool.find(url => !isVideoUrl(url)) ||
+    generalMedia.find(url => !isVideoUrl(url)) ||
+    'https://via.placeholder.com/400';
+  const displayMedia = [coverImageUrl];
 
   // Check if we have color-specific media to show
   const hasColorSpecificMedia = colorSpecificMedia.length > 0 && 
@@ -1751,82 +1723,28 @@ useEffect(() => {
                       <View style={styles.colorMediaHeader}>
                         <Ionicons name="color-palette" size={18} color={theme.primary} />
                         <Text style={[styles.colorMediaTitle, { color: theme.text }]}>
-                          Viewing: {order.selected_color} color media ({colorSpecificMedia.length} images)
+                          Viewing: {order.selected_color} color media (image)
                         </Text>
-                        <View style={[styles.colorIndicator, { backgroundColor: theme.primary }]}>
-                          <Text style={styles.colorIndicatorText}>Color Specific</Text>
-                        </View>
                       </View>
                     )}
                     {!hasColorSpecificMedia && order.selected_color && (
                       <View style={styles.colorMediaHeader}>
                         <Ionicons name="color-palette-outline" size={18} color={theme.textTertiary} />
                         <Text style={[styles.colorMediaTitle, { color: theme.textSecondary }]}>
-                          No specific media found for {order.selected_color}, showing all product images
+                          No specific media found for {order.selected_color}, showing cover image
                         </Text>
                       </View>
                     )}
-                    {/* Show one media at a time with swipe navigation for ordered product details */}
-                    {displayMedia && displayMedia.length > 0 && (
-                      <View style={{ width: isLargeScreen ? Math.min(width * 0.8, 700) : '100%', height: isLargeScreen ? 420 : 260, alignSelf: 'center' }}>
-                        <FlatList
-                          data={displayMedia}
-                          horizontal
-                          pagingEnabled
-                          showsHorizontalScrollIndicator={false}
-                          keyExtractor={(_, i) => i.toString()}
-                          getItemLayout={(_, i) => ({ length: isLargeScreen ? Math.min(width * 0.8, 700) : width, offset: (isLargeScreen ? Math.min(width * 0.8, 700) : width) * i, index: i })}
-                          initialScrollIndex={currentMediaIndex}
-                          onMomentumScrollEnd={(e) => {
-                            const containerWidth = isLargeScreen ? Math.min(width * 0.8, 700) : width;
-                            setCurrentMediaIndex(Math.round(e.nativeEvent.contentOffset.x / containerWidth));
-                          }}
-                          renderItem={({ item: url, index }) => {
-                            const isVideo = url.toLowerCase().includes('.mp4');
-                            const containerWidth = isLargeScreen ? Math.min(width * 0.8, 700) : width;
-                            const containerHeight = isLargeScreen ? 420 : 260;
-                            return (
-                              <TouchableOpacity 
-                                activeOpacity={0.95} 
-                                style={{ width: containerWidth, height: containerHeight, backgroundColor: theme.background }}
-                                onPress={() => onOpenFullViewer(index)}
-                              >
-                                {isVideo ? (
-                                  <View style={{ width: '100%', height: '100%' }}>
-                                    <Image source={{ uri: getCardDisplayUrl(displayMedia) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                                    <View style={styles.tiktokPlayThumbnailOverlay} pointerEvents="none">
-                                      <View style={styles.tiktokPlayButtonSmall}>
-                                        <Ionicons name="play" size={36} color="#fff" />
-                                      </View>
-                                    </View>
-                                  </View>
-                                ) : (
-                                  <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
-                                )}
-                              </TouchableOpacity>
-                            );
-                          }}
-                        />
-                      </View>
-                    )}
-                    
-                    {/* Media counter and color indicator */}
-                    {displayMedia.length > 1 && (
-                      <View style={[styles.mediaCounterBadge, { backgroundColor: theme.overlay }]}>
-                        <Text style={[styles.mediaCounterText, { color: '#fff' }]}>
-                          {currentMediaIndex + 1} / {displayMedia.length}
-                        </Text>
-                      </View>
-                    )}
-                    
-                    {/* Color media indicator */}
-                    {hasColorSpecificMedia && (
-                      <View style={[styles.colorMediaBadge, { backgroundColor: theme.primary }]}>
-                        <Text style={styles.colorMediaBadgeText}>
-                          {order.selected_color} • {colorSpecificMedia.length} images
-                        </Text>
-                      </View>
-                    )}
+                    {/* Ordered product details: show exactly one IMAGE */}
+                    <View style={{ width: isLargeScreen ? Math.min(width * 0.8, 700) : '100%', height: isLargeScreen ? 420 : 260, alignSelf: 'center' }}>
+                      <TouchableOpacity
+                        activeOpacity={0.95}
+                        style={{ width: '100%', height: '100%', backgroundColor: theme.background }}
+                        onPress={() => onOpenFullViewer(0)}
+                      >
+                        <Image source={{ uri: coverImageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               )}
@@ -1937,13 +1855,13 @@ useEffect(() => {
                   
                   <View style={styles.orderInfoRow}>
                     <Ionicons
-                      name={order.delivery_option === 'delivery' ? "car-outline" : "storefront-outline"}
+                      name={formatDeliveryOption(order.delivery_option) === 'Campus Delivery' ? "car-outline" : "storefront-outline"}
                       size={16}
                       color={theme.textTertiary}
                     />
                     <Text style={[styles.orderInfoLabel, { color: theme.textSecondary }]}>Delivery: </Text>
                     <Text style={[styles.orderInfoValue, { color: theme.text }]}>
-                      {order.delivery_option === 'delivery' ? 'Campus Delivery' : 'Meetup/Pickup'}
+                      {formatDeliveryOption(order.delivery_option)}
                     </Text>
                   </View>
                   
@@ -2557,7 +2475,7 @@ const OrdersScreenModal: React.FC<{
               <Text style={[styles.sellerName, { color: theme.textSecondary }]}>Shop: {shopData.name}</Text>
             </View>
             <Text style={[styles.orderDeliveryInfo, { color: theme.textTertiary }]}>
-              {item.delivery_option === 'delivery' ? 'Delivery' : 'Pickup'} • {item.location || 'No location specified'}
+              {formatDeliveryOption(item.delivery_option)} • {item.location || 'No location specified'}
             </Text>
           </View>
         </View>
@@ -3826,7 +3744,7 @@ const OrderFormModal: React.FC<{
     fullName: '',
     phoneNumber: '',
     location: '',
-    deliveryOption: 'delivery',
+    deliveryOption: 'Campus Delivery',
     additionalNotes: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -4118,7 +4036,7 @@ const OrderFormModal: React.FC<{
         fullName: '',
         phoneNumber: '',
         location: '',
-        deliveryOption: 'delivery',
+        deliveryOption: 'Campus Delivery',
         additionalNotes: '',
       });
       setPhoneError('');
@@ -4177,7 +4095,7 @@ const OrderFormModal: React.FC<{
         fullName: '',
         phoneNumber: '',
         location: '',
-        deliveryOption: 'delivery',
+        deliveryOption: 'Campus Delivery',
         additionalNotes: '',
       });
       setPhoneError('');
@@ -4535,12 +4453,12 @@ const OrderFormModal: React.FC<{
                 style={[
                   styles.deliveryOption,
                   { backgroundColor: theme.surface, borderColor: theme.border },
-                  orderData.deliveryOption === 'delivery' && [styles.deliveryOptionSelected, { borderColor: theme.primary }]
+                  orderData.deliveryOption === 'Campus Delivery' && [styles.deliveryOptionSelected, { borderColor: theme.primary }]
                 ]}
-                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'delivery' }))}
+                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'Campus Delivery' }))}
               >
                 <View style={[styles.deliveryOptionRadio, { borderColor: theme.primary }]}>
-                  {orderData.deliveryOption === 'delivery' && (
+                  {orderData.deliveryOption === 'Campus Delivery' && (
                     <View style={[styles.deliveryOptionRadioSelected, { backgroundColor: theme.primary }]} />
                   )}
                 </View>
@@ -4559,19 +4477,19 @@ const OrderFormModal: React.FC<{
                 style={[
                   styles.deliveryOption,
                   { backgroundColor: theme.surface, borderColor: theme.border },
-                  orderData.deliveryOption === 'pickup' && [styles.deliveryOptionSelected, { borderColor: theme.primary }]
+                  orderData.deliveryOption === 'Meetup / Pickup' && [styles.deliveryOptionSelected, { borderColor: theme.primary }]
                 ]}
-                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'pickup' }))}
+                onPress={() => setOrderData(prev => ({ ...prev, deliveryOption: 'Meetup / Pickup' }))}
               >
                 <View style={[styles.deliveryOptionRadio, { borderColor: theme.primary }]}>
-                  {orderData.deliveryOption === 'pickup' && (
+                  {orderData.deliveryOption === 'Meetup / Pickup' && (
                     <View style={[styles.deliveryOptionRadioSelected, { backgroundColor: theme.primary }]} />
                   )}
                 </View>
                 <View style={styles.deliveryOptionContent}>
                   <Ionicons name="storefront" size={24} color={theme.primary} />
                   <View style={styles.deliveryOptionText}>
-                    <Text style={[styles.deliveryOptionTitle, { color: theme.text }]}>Meetup/Pickup</Text>
+                    <Text style={[styles.deliveryOptionTitle, { color: theme.text }]}>Meetup / Pickup</Text>
                     <Text style={[styles.deliveryOptionDescription, { color: theme.textSecondary }]}>
                       Pick up product from seller's location
                     </Text>
@@ -4844,8 +4762,10 @@ const ProductMediaView = ({ urls, onPressMedia, theme }: {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / mediaWidth))}
-        scrollEventThrottle={16}
+        style={{ width: mediaWidth, alignSelf: 'center' }}
+        snapToInterval={mediaWidth}
+        decelerationRate="fast"
+        onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / mediaWidth))}
         keyExtractor={(_, i) => i.toString()}
         renderItem={({ item: url, index }) => (
           <TouchableOpacity 
@@ -6449,6 +6369,7 @@ export default function BuyerScreen() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedSellerId, setSelectedSellerId] = useState<string>('');
   const [fullViewerIndex, setFullViewerIndex] = useState(-1);
+  const [fullViewerMediaUrls, setFullViewerMediaUrls] = useState<string[]>([]);
   const [orderFormVisible, setOrderFormVisible] = useState(false);
   const [orderForProduct, setOrderForProduct] = useState<Product | null>(null);
   const [orderInitialOptions, setOrderInitialOptions] = useState<{ selectedColor?: string | null; selectedSize?: string | null; quantity?: number | null } | null>(null);
@@ -6712,6 +6633,11 @@ export default function BuyerScreen() {
     setModalFromSellerProfile(fromSellerProfile);
     setModalVisible(true);
   };
+
+  const openFullViewer = (mediaUrls: string[], index: number) => {
+    setFullViewerMediaUrls(mediaUrls || []);
+    setFullViewerIndex(index);
+  };
  
   const openComments = (product: Product) => {
     setSelectedProduct(product);
@@ -6748,7 +6674,7 @@ export default function BuyerScreen() {
     onClose: () => void;
     product: Product | null;
     order: any | null;
-    onOpenFullViewer: (index: number) => void;
+    onOpenFullViewer: (mediaUrls: string[], index: number) => void;
     onContactSeller: () => void;
     onCancelOrder: (orderId: string) => Promise<void>;
     showAlert: (title: string, message: string, buttons?: any[]) => void;
@@ -6967,7 +6893,7 @@ export default function BuyerScreen() {
                       )}
                       <ProductMediaView 
                         urls={displayMedia} 
-                        onPressMedia={onOpenFullViewer} 
+                        onPressMedia={(index) => onOpenFullViewer(displayMedia, index)} 
                         theme={theme} 
                       />
                       
@@ -7089,13 +7015,13 @@ export default function BuyerScreen() {
                     
                     <View style={styles.orderInfoRow}>
                       <Ionicons
-                        name={order.delivery_option === 'delivery' ? "car-outline" : "storefront-outline"}
+                        name={formatDeliveryOption(order.delivery_option) === 'Campus Delivery' ? "car-outline" : "storefront-outline"}
                         size={16}
                         color={theme.textTertiary}
                       />
                       <Text style={[styles.orderInfoLabel, { color: theme.textSecondary }]}>Delivery: </Text>
                       <Text style={[styles.orderInfoValue, { color: theme.text }]}>
-                        {order.delivery_option === 'delivery' ? 'Campus Delivery' : 'Meetup/Pickup'}
+                        {formatDeliveryOption(order.delivery_option)}
                       </Text>
                     </View>
                     
@@ -8138,7 +8064,7 @@ export default function BuyerScreen() {
           }
         }}
         product={selectedProduct || productFromQuery}
-        onOpenFullViewer={setFullViewerIndex}
+        onOpenFullViewer={(index) => openFullViewer((selectedProduct || productFromQuery)?.media_urls || [], index)}
         onSelectSimilarProduct={handleSelectSimilarProduct as any}
         onAddToCart={handleAddToCart as any}
         isInCart={() => cartItems.some(item => item.product.id === (selectedProduct?.id || productFromQuery?.id))}
@@ -8160,7 +8086,7 @@ export default function BuyerScreen() {
       <FullImageViewer 
         isVisible={fullViewerIndex !== -1} 
         onClose={() => setFullViewerIndex(-1)} 
-        mediaUrls={selectedProduct?.media_urls || []} 
+        mediaUrls={fullViewerMediaUrls} 
         initialIndex={fullViewerIndex}
         theme={theme}
       />
@@ -8214,7 +8140,7 @@ export default function BuyerScreen() {
         }}
         product={selectedOrderProduct}
         order={selectedOrder}
-        onOpenFullViewer={setFullViewerIndex}
+        onOpenFullViewer={(mediaUrls, index) => openFullViewer(mediaUrls, index)}
         onContactSeller={() => {
           if (selectedOrderProduct) {
             setContactSellerProduct(selectedOrderProduct);
