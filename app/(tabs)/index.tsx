@@ -7837,8 +7837,23 @@ export default function BuyerScreen() {
   }).current;
 
   // Get selected campus university (works even when not logged in)
+  // Get campus: if authenticated, use profile; else use AsyncStorage
   const getCurrentUserUniversity = async () => {
     try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data?.user?.id;
+      if (userId) {
+        // Authenticated: get campus from profile
+        const { data: profile, error } = await supabase
+          .from('user_profiles')
+          .select('university')
+          .eq('id', userId)
+          .single();
+        if (!error && profile?.university) {
+          return profile.university;
+        }
+      }
+      // Not authenticated or no profile campus: fallback to AsyncStorage
       return await getSelectedCampus();
     } catch (error) {
       console.error('Error in getCurrentUserUniversity:', error);
@@ -7908,9 +7923,6 @@ export default function BuyerScreen() {
       
       // If current user is a seller, include their products too
       const allSellerIds = [...sameUniversitySellerIds];
-      if (currentUserId && !allSellerIds.includes(currentUserId)) {
-        allSellerIds.push(currentUserId);
-      }
       
       if (allSellerIds.length === 0) {
         console.log('⚠️ No sellers found in your university');
@@ -7987,10 +7999,15 @@ export default function BuyerScreen() {
       const profiles = profilesRes.data || [];
       
       // Enrich products with all counts including share count from product_shares
-      const enriched: Product[] = scored.map(p => {
+      // Filter products so only those from sellers whose profile university matches the selected campus are shown
+      const filteredProducts = scored.filter(p => {
+        const profile = profiles.find((pr: any) => pr.id === p.seller_id);
+        return profile?.university === currentUserUniversity;
+      });
+
+      const enriched: Product[] = filteredProducts.map(p => {
         const shop = shops.find((s: any) => s.owner_id === p.seller_id);
         const profile = profiles.find((pr: any) => pr.id === p.seller_id);
-       
         let avatarUrl;
         if (shop?.avatar_url) {
           avatarUrl = shop.avatar_url.startsWith('http')
@@ -8003,7 +8020,6 @@ export default function BuyerScreen() {
         } else {
           avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(shop?.name || profile?.full_name || 'U')}&background=FF9900&color=fff&bold=true`;
         }
-       
         return {
           ...p,
           display_name: shop?.name || profile?.full_name || 'Verified Seller',
@@ -8019,9 +8035,9 @@ export default function BuyerScreen() {
           inCart: cartProductIds.includes(p.id),
         } as Product;
       });
-      
+
       setProducts(prev => currentPage === 0 ? enriched : [...prev, ...enriched]);
-      setHasMore(rawProducts.length === PAGE_SIZE);
+      setHasMore(filteredProducts.length === PAGE_SIZE);
       setPage(currentPage + 1);
     } catch (err) {
       console.error('Load products error:', err);

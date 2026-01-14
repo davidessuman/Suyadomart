@@ -1994,9 +1994,7 @@ export default function EventsScreen() {
     try {
       let campus = await getSelectedCampus();
       if (!campus) {
-        // If no campus is selected, set a default (first in list)
-        // Import the campus list
-        // Dynamically import to avoid circular deps if any
+        // If no campus is selected (including unauthenticated users), set a default campus
         const { GHANA_UNIVERSITIES } = await import('@/constants/campuses');
         campus = GHANA_UNIVERSITIES[0];
         // Optionally, persist this selection for the session
@@ -2007,8 +2005,10 @@ export default function EventsScreen() {
         setUserUniversity(campus);
       }
 
+      // Always allow events to be shown for the selected campus, even if not authenticated
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setCurrentUserId(user.id);
+      // If not authenticated, currentUserId remains empty, but events will still show
     } catch (error) {
       console.error('Error fetching user university:', error);
       showAlert('Error', 'Unable to load your university information');

@@ -74,10 +74,9 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme() || 'light';
   const isDarkMode = colorScheme === 'dark';
 
-  const { campus: selectedCampus, save: saveCampus } = useSelectedCampus();
-  
-  const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
+  // Pass session to useSelectedCampus for sync
+  const { campus: selectedCampus, save: saveCampus, loading } = useSelectedCampus(session);
   const [profile, setProfile] = useState<any>(null);
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [avatarLoading, setAvatarLoading] = useState(false);
@@ -251,7 +250,6 @@ export default function ProfileScreen() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user?.id) loadUserData(session.user.id);
-      setLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -343,11 +341,10 @@ export default function ProfileScreen() {
 
     // Set new debounce timer
     if (text.trim().length >= 2 && selectedSchool) {
-      setShopNameDebounce(
-        setTimeout(() => {
-          checkShopNameAvailability(text);
-        }, 500)
-      );
+      const timeout = setTimeout(() => {
+        checkShopNameAvailability(text);
+      }, 500);
+      setShopNameDebounce(timeout as unknown as NodeJS.Timeout);
     } else {
       setShopNameAvailability(null);
     }
@@ -444,18 +441,10 @@ export default function ProfileScreen() {
     }
 
     try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ university: selectedSchool })
-        .eq('id', session?.user?.id);
-
-      if (error) {
-        Alert.alert('Failed', error.message, [{ text: 'OK' }]);
-      } else {
-        setProfile({ ...profile, university: selectedSchool });
-        setSettingsModal(false);
-        Alert.alert('Success', 'University updated!', [{ text: 'OK' }]);
-      }
+      await saveCampus(selectedSchool);
+      setProfile({ ...profile, university: selectedSchool });
+      setSettingsModal(false);
+      Alert.alert('Success', 'University updated!', [{ text: 'OK' }]);
     } catch (error) {
       Alert.alert('Error', 'Failed to update university', [{ text: 'OK' }]);
     }
