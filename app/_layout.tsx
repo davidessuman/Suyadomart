@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppAlertProvider from './AppAlertProvider';
+import { getSelectedCampus } from '@/lib/campus';
 
 // ──────────────────────────────────────────────────────────────
 // Assets
@@ -28,6 +29,7 @@ export default function RootLayout() {
 
   const [session, setSession] = useState<any>(null);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
+  const [selectedCampus, setSelectedCampus] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -36,6 +38,10 @@ export default function RootLayout() {
         // 1. Load Onboarding Status
         const onboardingValue = await AsyncStorage.getItem('hasSeenOnboarding');
         setHasSeenOnboarding(onboardingValue === 'true');
+
+        // 1b. Load Selected Campus (university)
+        const campus = await getSelectedCampus();
+        setSelectedCampus(campus);
 
         // 2. Load Session
         const { data: { session } } = await supabase.auth.getSession();
@@ -73,41 +79,59 @@ export default function RootLayout() {
       const inTabs = segments[0] === '(tabs)';
       const otpPending = await AsyncStorage.getItem('otp_pending');
 
+      // RootLayout reads selectedCampus on mount, but onboarding can update it later.
+      // Re-check storage here so navigation updates immediately (web otherwise needs refresh).
+      let effectiveCampus = selectedCampus;
+      if (!effectiveCampus) {
+        effectiveCampus = await getSelectedCampus();
+        if (effectiveCampus !== selectedCampus) {
+          setSelectedCampus(effectiveCampus);
+        }
+      }
+
+      // Campus selection is required before browsing.
+      // Allow /auth without campus ONLY when OTP is pending.
+      if (!effectiveCampus) {
+        if (otpPending === 'true') {
+          if (!inAuth) router.replace('/auth');
+          return;
+        }
+        if (!inOnboarding) router.replace('/onboarding');
+        return;
+      }
+
       // 1. Authenticated User
       if (session) {
         if (otpPending === 'true') {
           if (!inAuth) router.replace('/auth');
           return;
         }
-        // Go to Home immediately
-        if (!inTabs) router.replace('/(tabs)');
+        // If they are still on onboarding, move to Home.
+        if (inOnboarding) {
+          router.replace('/(tabs)');
+          return;
+        }
+
+        // Default landing is tabs, but don't force-navigate away from auth.
+        if (!inTabs && !inAuth) router.replace('/(tabs)');
         return;
       }
 
       // 2. Unauthenticated User
+      // Unauthenticated users can browse tabs once campus is selected.
+      // Keep hasSeenOnboarding for backward compatibility only.
       if (!hasSeenOnboarding) {
-        // CRITICAL FIX:
-        // If local state says they haven't seen onboarding, but they are trying to access Auth,
-        // let's double-check Storage. They might have JUST clicked "Get Started".
-        if (inAuth) {
-            const checkAgain = await AsyncStorage.getItem('hasSeenOnboarding');
-            if (checkAgain === 'true') {
-                setHasSeenOnboarding(true); // Update state so we don't check again
-                return; // Allow them to stay on /auth
-            }
-        }
-
-        // If truly hasn't seen it, force back to onboarding
-        if (!inOnboarding) router.replace('/onboarding');
-        return;
+        setHasSeenOnboarding(true);
       }
 
-      // 3. Has seen onboarding, but not logged in -> Go to Auth
-      if (!inAuth) router.replace('/auth');
+      // If they somehow remain on onboarding after selecting a campus, move to tabs.
+      if (inOnboarding) {
+        router.replace('/(tabs)');
+      }
     };
 
     performNavigation();
-  }, [isReady, session, hasSeenOnboarding, segments]);
+  }, [isReady, session, hasSeenOnboarding, selectedCampus, segments]);
 
   // ──────────────────────────────────────────────────────────────
   // SHOW SPLASH SCREEN INSTEAD OF NULL

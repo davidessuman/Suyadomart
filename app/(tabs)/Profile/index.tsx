@@ -1,5 +1,5 @@
 // app/(tabs)/Profile/index.tsx
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSelectedCampus } from '@/app/hooks/useSelectedCampus';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,6 +32,7 @@ const GHANA_UNIVERSITIES = [
   'University of Ghana', 'Kwame Nkrumah University of Science and Technology', 'University of Cape Coast',
   'University of Education, Winneba', 'University for Development Studies', 'University of Energy and Natural Resources',
   'University of Mines and Technology', 'University of Health and Allied Sciences', 'Ghana Institute of Management and Public Administration',
+  'University of Professional Studies, Accra',
   'Accra Technical University', 'Kumasi Technical University', 'Takoradi Technical University', 'Ho Technical University',
   'Cape Coast Technical University', 'Bolgatanga Technical University', 'Koforidua Technical University', 'Tamale Technical University',
   'Sunyani Technical University', 'Regent University College of Science and Technology', 'Ashesi University', 'Central University',
@@ -38,12 +41,40 @@ const GHANA_UNIVERSITIES = [
   'Lancaster University Ghana', 'Academic City University College', 'Radford University College'
 ].sort();
 
+const ACRONYM_STOPWORDS = new Set(['of', 'for', 'and', 'the', 'in', 'at', 'on']);
+
+const toSearchKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const toAcronym = (name: string) => {
+  const words = toSearchKey(name)
+    .split(' ')
+    .filter(Boolean)
+    .filter((w) => !ACRONYM_STOPWORDS.has(w));
+  return words.map((w) => w[0]).join('');
+};
+
+const matchesUniversity = (universityName: string, rawQuery: string) => {
+  const q = toSearchKey(rawQuery);
+  if (!q) return true;
+
+  const nameKey = toSearchKey(universityName);
+  if (nameKey.includes(q)) return true;
+
+  const qCompact = q.replace(/\s+/g, '');
+  const acronym = toAcronym(universityName);
+  if (acronym.startsWith(qCompact)) return true;
+
+  return nameKey.split(' ').some((w) => w.startsWith(q));
+};
+
 const SELLER_BACKGROUND_URL = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1350&q=80';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() || 'light';
   const isDarkMode = colorScheme === 'dark';
+
+  const { campus: selectedCampus, save: saveCampus } = useSelectedCampus();
   
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
@@ -65,6 +96,12 @@ export default function ProfileScreen() {
   const [showSellerSection, setShowSellerSection] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
 
+  // Campus picker (for guests and optionally authenticated users)
+  const [campusPickerVisible, setCampusPickerVisible] = useState(false);
+  const [campusPickerSearch, setCampusPickerSearch] = useState('');
+  const [campusPickerSelected, setCampusPickerSelected] = useState<string>('');
+  const [campusPickerSaving, setCampusPickerSaving] = useState(false);
+
   // Shop name availability states
   const [shopNameAvailability, setShopNameAvailability] = useState<'checking' | 'available' | 'taken' | null>(null);
   const [shopNameDebounce, setShopNameDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -85,7 +122,7 @@ export default function ProfileScreen() {
     primaryDark: '#f57c00',
     background: isDarkMode ? '#0f172a' : '#f8fafc',
     card: isDarkMode ? '#1e293b' : '#ffffff',
-    text: isDarkMode ? '#f1f5f9' : '#1e293b',
+    text: isDarkMode ? '#0418f5' : '#0418f5',
     textSecondary: isDarkMode ? '#94a3b8' : '#64748b',
     border: isDarkMode ? '#334155' : '#e2e8f0',
     inputBg: isDarkMode ? '#1e293b' : '#ffffff',
@@ -98,10 +135,32 @@ export default function ProfileScreen() {
 
   const filteredUniversities = useMemo(() => {
     if (!universitySearch) return GHANA_UNIVERSITIES;
-    return GHANA_UNIVERSITIES.filter(uni =>
-      uni.toLowerCase().includes(universitySearch.toLowerCase())
-    );
+    return GHANA_UNIVERSITIES.filter((uni) => matchesUniversity(uni, universitySearch));
   }, [universitySearch]);
+
+  const filteredCampuses = useMemo(() => {
+    if (!campusPickerSearch.trim()) return GHANA_UNIVERSITIES;
+    return GHANA_UNIVERSITIES.filter((uni) => matchesUniversity(uni, campusPickerSearch));
+  }, [campusPickerSearch]);
+
+  const openCampusPicker = useCallback(() => {
+    setCampusPickerSearch('');
+    setCampusPickerSelected(selectedCampus || '');
+    setCampusPickerVisible(true);
+  }, [selectedCampus]);
+
+  const confirmCampusPicker = useCallback(async () => {
+    if (!campusPickerSelected || campusPickerSaving) return;
+    setCampusPickerSaving(true);
+    try {
+      await saveCampus(campusPickerSelected);
+      setCampusPickerVisible(false);
+      // Reset tabs so Home/Search/Events remount with new campus.
+      router.replace('/(tabs)');
+    } finally {
+      setCampusPickerSaving(false);
+    }
+  }, [campusPickerSelected, campusPickerSaving, router, saveCampus]);
 
   const getFallbackAvatar = () => {
     const email = session?.user?.email || 'user';
@@ -219,6 +278,21 @@ export default function ProfileScreen() {
       }
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading && !session?.user) {
+        Alert.alert(
+          'Sign up required',
+          'Please sign up or log in to view your profile, manage your details, and become a seller.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+          ],
+        );
+      }
+    }, [loading, router, session?.user])
+  );
 
   // Function to check shop name availability
   const checkShopNameAvailability = async (name: string) => {
@@ -612,6 +686,140 @@ export default function ProfileScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <ActivityIndicator size="large" color={colors.primary} style={{ flex: 1 }} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!session?.user) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <View style={styles.guestContainer}>
+          <View style={[styles.guestCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="person-circle-outline" size={64} color={colors.primary} />
+            <Text style={[styles.guestTitle, { color: colors.text }]}>Welcome</Text>
+            <Text style={[styles.guestSubtitle, { color: colors.textSecondary }]}>Sign up or log in to view your profile, orders, cart, and seller tools.</Text>
+            <TouchableOpacity
+              style={[styles.guestPrimaryButton, { backgroundColor: colors.primary }]}
+              onPress={() => router.push('/auth')}
+            >
+              <Text style={styles.guestPrimaryButtonText}>Login / Sign up</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.guestSecondaryButton, { borderColor: colors.border }]}
+              onPress={openCampusPicker}
+            >
+              <Text style={[styles.guestSecondaryButtonText, { color: colors.text }]}>Change campus</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <Modal
+          visible={campusPickerVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setCampusPickerVisible(false)}
+        >
+          <View style={[styles.modalContainer, { backgroundColor: colors.overlay }]}>
+            <View style={[styles.modalSheet, { backgroundColor: colors.modalBg }]}>
+              <View style={styles.modalHeader}>
+                <View style={styles.headerContent}>
+                  <MaterialCommunityIcons name="university" size={28} color={colors.primary} />
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Choose your campus</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.closeButton, { backgroundColor: colors.border }]}
+                  onPress={() => setCampusPickerVisible(false)}
+                >
+                  <Ionicons name="close" size={22} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.searchContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  placeholder="Search universities..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={campusPickerSearch}
+                  onChangeText={setCampusPickerSearch}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+                {campusPickerSearch ? (
+                  <TouchableOpacity onPress={() => setCampusPickerSearch('')}>
+                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={styles.universityListContainer}>
+                <FlatList
+                  data={filteredCampuses}
+                  keyExtractor={(item) => item}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.universityListContent}
+                  renderItem={({ item }) => {
+                    const isSelected = campusPickerSelected === item;
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.universityCard,
+                          {
+                            backgroundColor: isSelected ? colors.primary + '10' : colors.card,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                          },
+                        ]}
+                        onPress={() => setCampusPickerSelected(item)}
+                      >
+                        <View style={styles.universityCardContent}>
+                          <View style={[styles.universityIcon, { backgroundColor: colors.primary + '15' }]}>
+                            <Ionicons name="school" size={22} color={colors.primary} />
+                          </View>
+                          <View style={styles.universityInfo}>
+                            <Text style={[styles.universityName, { color: colors.text }]} numberOfLines={2}>
+                              {item}
+                            </Text>
+                            {isSelected ? (
+                              <Text style={[styles.selectedLabel, { color: colors.primary }]}>Selected</Text>
+                            ) : null}
+                          </View>
+                        </View>
+                        <View style={[styles.selectedCheck, { backgroundColor: isSelected ? colors.primary : colors.border }]}>
+                          <Ionicons name={isSelected ? 'checkmark' : 'ellipse-outline'} size={16} color={isSelected ? 'white' : colors.textSecondary} />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.secondaryAction, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }]}
+                  onPress={() => setCampusPickerVisible(false)}
+                  disabled={campusPickerSaving}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.primaryAction,
+                    { backgroundColor: !campusPickerSelected || campusPickerSaving ? `${colors.primary}66` : colors.primary },
+                  ]}
+                  onPress={confirmCampusPicker}
+                  disabled={!campusPickerSelected || campusPickerSaving}
+                >
+                  <Text style={[styles.actionButtonText, { color: 'white' }]}>
+                    {campusPickerSaving ? 'Saving…' : 'Continue'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -1195,6 +1403,14 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   userContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  guestContainer: { flex: 1, paddingHorizontal: 20, justifyContent: 'center' },
+  guestCard: { borderRadius: 24, padding: 24, borderWidth: 1, alignItems: 'center' },
+  guestTitle: { fontSize: 28, fontWeight: '800', marginTop: 12, marginBottom: 6 },
+  guestSubtitle: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
+  guestPrimaryButton: { width: '100%', paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 12 },
+  guestPrimaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  guestSecondaryButton: { width: '100%', paddingVertical: 14, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  guestSecondaryButtonText: { fontSize: 16, fontWeight: '700' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 16, borderBottomWidth: 1, marginBottom: 20 },
   headerTitle: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
   settingsButton: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },

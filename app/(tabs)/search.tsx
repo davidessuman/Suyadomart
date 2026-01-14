@@ -34,6 +34,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 import ResponsiveVideo from '../components/ResponsiveVideo';
 import { Video, ResizeMode } from 'expo-av';
+import { getSelectedCampus } from '@/lib/campus';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const PRIMARY_COLOR = '#F68B1E';
@@ -201,24 +202,31 @@ const getCurrentUserId = async () => {
   return data?.user?.id ?? null;
 };
 
-// NEW FUNCTION: Get current user's university and seller status
+// Get browsing campus (selected on onboarding) + seller status if logged in
 const getCurrentUserUniversity = async () => {
   try {
+    const selectedCampus = await getSelectedCampus();
     const userId = await getCurrentUserId();
-    if (!userId) return null;
-    
+
+    if (!userId) {
+      return selectedCampus ? { university: selectedCampus, is_seller: false } : null;
+    }
+
     const { data, error } = await supabase
       .from('user_profiles')
       .select('university, is_seller')
       .eq('id', userId)
       .single();
-    
+
     if (error) {
       console.error('Error fetching user university:', error);
-      return null;
+      return selectedCampus ? { university: selectedCampus, is_seller: false } : null;
     }
-    
-    return data;
+
+    return {
+      university: data?.university || selectedCampus || null,
+      is_seller: !!data?.is_seller,
+    };
   } catch (error) {
     console.error('Error in getCurrentUserUniversity:', error);
     return null;
@@ -287,7 +295,10 @@ const getCardDisplayMedia = (mediaUrls: string[] | undefined): string | undefine
 };
 
 // === CART MANAGER ===
-const useCart = (showAlert: (title: string, message: string, buttons?: AlertButton[]) => void) => {
+const useCart = (
+  showAlert: (title: string, message: string, buttons?: AlertButton[]) => void,
+  onRequireAuth: (action?: string) => void,
+) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartVisible, setCartVisible] = useState(false);
 
@@ -299,10 +310,7 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
     try {
       const userId = await getCurrentUserId();
       if (!userId) {
-        const savedCart = localStorage.getItem('search_cart');
-        if (savedCart) {
-          setCartItems(JSON.parse(savedCart));
-        }
+        setCartItems([]);
         return;
       }
 
@@ -324,18 +332,17 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
       setCartItems(items);
     } catch (error) {
       console.error('Error loading cart:', error);
-      const savedCart = localStorage.getItem('search_cart');
-      if (savedCart) {
-        setCartItems(JSON.parse(savedCart));
-      }
+      setCartItems([]);
     }
   };
 
   const saveCart = async (items: CartItem[]) => {
     try {
-      localStorage.setItem('search_cart', JSON.stringify(items));
-      
       const userId = await getCurrentUserId();
+      if (!userId) {
+        return;
+      }
+
       if (userId) {
         await supabase.from('cart_items').delete().eq('user_id', userId);
         
@@ -358,6 +365,12 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
   };
 
   const addToCart = async (product: Product, selectedColor?: string, selectedSize?: string, quantity: number = 1) => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      onRequireAuth('add items to your cart');
+      throw new Error('User not authenticated');
+    }
+
     const existingItemIndex = cartItems.findIndex(item => 
       item.product.id === product.id && 
       item.selectedColor === selectedColor && 
@@ -386,6 +399,12 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
   };
 
   const removeFromCart = async (productId: string, selectedColor?: string, selectedSize?: string) => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      onRequireAuth('manage your cart');
+      throw new Error('User not authenticated');
+    }
+
     const newCartItems = cartItems.filter(item => 
       !(item.product.id === productId && 
         item.selectedColor === selectedColor && 
@@ -398,6 +417,12 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
   };
 
   const updateQuantity = async (productId: string, quantity: number, selectedColor?: string, selectedSize?: string) => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      onRequireAuth('update your cart');
+      throw new Error('User not authenticated');
+    }
+
     if (quantity < 1) {
       return removeFromCart(productId, selectedColor, selectedSize);
     }
@@ -416,6 +441,12 @@ const useCart = (showAlert: (title: string, message: string, buttons?: AlertButt
   };
 
   const clearCart = async () => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      onRequireAuth('clear your cart');
+      throw new Error('User not authenticated');
+    }
+
     setCartItems([]);
     await saveCart([]);
     showAlert('Cart Cleared', 'All items have been removed from your cart');
@@ -2739,7 +2770,7 @@ const getAvailableStock = () => {
                     border: borderColor,
                   }}
                   showAlert={showAlert}
-                  onRequireAuth={() => onRequireAuth('leave a review')}
+                  onRequireAuth={() => requireAuth('leave a review')}
                 />
               )}
               
@@ -3790,7 +3821,7 @@ export default function SearchScreen() {
     getCartCount,
     getCartTotal,
     loadCart,
-  } = useCart(showAlert);
+  } = useCart(showAlert, requireAuth);
 
   const colorScheme = useColorScheme();
   const HORIZONTAL_PADDING = 16;
@@ -4612,7 +4643,7 @@ export default function SearchScreen() {
     try {
       const userId = await getCurrentUserId();
       if (!userId) {
-        showAlert('Login Required', 'Please log in to place order');
+        requireAuth('place an order');
         throw new Error('Please log in to place order');
       }
 

@@ -17,14 +17,17 @@ import {
   useColorScheme,
   Animated,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { ExpoCalendar } from '@/lib/expoCalendar';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+import { getSelectedCampus } from '@/lib/campus';
 
 // Get screen dimensions for responsive design
 const getScreenDimensions = () => Dimensions.get('window');
@@ -1580,6 +1583,7 @@ type FilterType =
 
 /* ---------------- MAIN COMPONENT ---------------- */
 export default function EventsScreen() {
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
   const colors = getThemeColors(isDarkMode);
@@ -1607,6 +1611,7 @@ export default function EventsScreen() {
   const [userUniversity, setUserUniversity] = useState<string>('');
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [feedView, setFeedView] = useState<'events' | 'announcements'>('events');
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
 
@@ -1700,6 +1705,17 @@ export default function EventsScreen() {
       message,
       buttons: buttons || [{ text: 'OK', onPress: () => {} }],
     });
+  };
+
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please sign up or log in to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
   };
 
   const hideAlert = () => {
@@ -1953,6 +1969,13 @@ export default function EventsScreen() {
     }
   }, [userUniversity]);
 
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchEvents(), fetchAllAnnouncements()]);
+    setRefreshing(false);
+  };
+
   // Reset banner index when events change
   useEffect(() => {
     setBannerIndex(0);
@@ -1969,20 +1992,23 @@ export default function EventsScreen() {
 
   const fetchUserUniversity = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUserId(user.id);
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('university')
-          .eq('id', user.id)
-          .single();
-
-        if (error) throw error;
-        if (data) {
-          setUserUniversity(data.university);
+      let campus = await getSelectedCampus();
+      if (!campus) {
+        // If no campus is selected, set a default (first in list)
+        // Import the campus list
+        // Dynamically import to avoid circular deps if any
+        const { GHANA_UNIVERSITIES } = await import('@/constants/campuses');
+        campus = GHANA_UNIVERSITIES[0];
+        // Optionally, persist this selection for the session
+        if (campus) {
+          setUserUniversity(campus);
         }
+      } else {
+        setUserUniversity(campus);
       }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
     } catch (error) {
       console.error('Error fetching user university:', error);
       showAlert('Error', 'Unable to load your university information');
@@ -3217,7 +3243,7 @@ export default function EventsScreen() {
       // Get current user ID
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        showAlert('Error', 'You must be logged in to create events');
+        requireAuth('create an event');
         return;
       }
 
@@ -4277,6 +4303,13 @@ export default function EventsScreen() {
           keyExtractor={item => item.id}
           renderItem={feedView === 'events' ? renderEvent : renderAnnouncement}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+            />
+          }
         />
       )}
 
@@ -4290,6 +4323,10 @@ export default function EventsScreen() {
               style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => {
                 setShowActionMenu(false);
+                if (!currentUserId) {
+                  requireAuth('create an event');
+                  return;
+                }
                 setIsModalVisible(true);
               }}
             >
@@ -4304,6 +4341,10 @@ export default function EventsScreen() {
               style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => {
                 setShowActionMenu(false);
+                if (!currentUserId) {
+                  requireAuth('post an announcement');
+                  return;
+                }
                 setIsAnnouncementModalVisible(true);
               }}
             >
@@ -4318,6 +4359,10 @@ export default function EventsScreen() {
               style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => {
                 setShowActionMenu(false);
+                if (!currentUserId) {
+                  requireAuth('view your events');
+                  return;
+                }
                 fetchUserEvents();
                 setShowUserEvents(true);
               }}
@@ -4333,6 +4378,10 @@ export default function EventsScreen() {
               style={[styles.actionMenuButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => {
                 setShowActionMenu(false);
+                if (!currentUserId) {
+                  requireAuth('view your announcements');
+                  return;
+                }
                 fetchUserAnnouncements();
                 setShowUserAnnouncements(true);
               }}
@@ -5711,7 +5760,7 @@ export default function EventsScreen() {
                   try {
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) {
-                      showAlert('Error', 'You must be logged in to post announcements');
+                      requireAuth('post an announcement');
                       return;
                     }
 

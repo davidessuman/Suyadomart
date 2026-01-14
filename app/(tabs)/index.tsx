@@ -32,6 +32,7 @@ import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams, usePathname } from 'expo-router';
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
+import { getSelectedCampus } from '@/lib/campus';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const SUPABASE_PROJECT_REF = 'qwujadyqebfypyhfuwfl';
@@ -1928,7 +1929,7 @@ useEffect(() => {
               </View>
             </ScrollView>
           )}
-          <View style={[styles.modalActionBar, { borderTopColor: theme.border, backgroundColor: theme.modalBackground }]}>
+          <View style={[styles.modalActionBar, { borderTopColor: theme.border, backgroundColor: theme.modalBackground }]}> 
             {(order.status === 'pending' || order.status === 'processing') && (
               <TouchableOpacity
                 style={[styles.modalContactButton, { backgroundColor: theme.surface }]}
@@ -1954,6 +1955,22 @@ useEffect(() => {
                   {cancelling ? 'Cancelling...' : 'Cancel Order'}
                 </Text>
               </TouchableOpacity>
+            )}
+
+            {/* Add Review Button for Completed Orders */}
+            {order.status === 'completed' && currentUserId && product?.id && (
+              <ProductReviewsSection
+                productId={product.id}
+                currentUserId={currentUserId}
+                theme={theme}
+                showAlert={showAlert}
+                onRequireAuth={() => showAlert('Login Required', 'Please log in to leave a review.')}
+                /*
+                  Only show the add review button if the user hasn't reviewed yet.
+                  ProductReviewsSection will handle showing the button/modal.
+                */
+                showOnlyAddButton
+              />
             )}
           </View>
         </View>
@@ -1984,6 +2001,18 @@ const OrdersScreenModal: React.FC<{
   const [calendarFilter, setCalendarFilter] = useState<DateSelection | null>(null);
   const [showSortFilterMenu, setShowSortFilterMenu] = useState(false);
   const [showCalendarFilter, setShowCalendarFilter] = useState(false);
+
+  const router = useRouter();
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
 
   const getCurrentUserId = async () => {
     const { data } = await supabase.auth.getUser();
@@ -2150,7 +2179,7 @@ const OrdersScreenModal: React.FC<{
       setLoading(true);
       const userId = await getCurrentUserId();
       if (!userId) {
-        showAlert('Login Required', 'Please log in to view orders');
+        requireAuth('view orders');
         onClose();
         return;
       }
@@ -2404,7 +2433,8 @@ const OrdersScreenModal: React.FC<{
     return '';
   };
 
-  const renderOrderItem = ({ item }: { item: any }) => {
+  // Add propsCurrentUserId to argument for FlatList
+  const renderOrderItem = ({ item, propsCurrentUserId }: { item: any, propsCurrentUserId?: string | null }) => {
     const firstItem = item.order_items?.[0] || item;
     // Prefer an image thumbnail when possible (avoid showing raw video in list)
     const possibleMedia = [
@@ -2432,11 +2462,13 @@ const OrdersScreenModal: React.FC<{
     const shopData = getShopDataForOrder(item);
     const avatarUrl = getAvatarUrlForOrder(item);
    
+    // Use currentUserId from OrdersScreenModal state
+    const product = getProductFromOrder(item);
     return (
-      <View style={[styles.orderCard, { 
+      <View style={[styles.orderCard, {
         backgroundColor: theme.surface,
         shadowColor: theme.shadow,
-      }]}>
+      }]}> 
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
             <Text style={[styles.orderId, { color: theme.text }]}>Order #{item.id.slice(-8)}</Text>
@@ -2444,7 +2476,7 @@ const OrdersScreenModal: React.FC<{
               {formatDate(item.created_at)}
             </Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, theme) }]}>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, theme) }]}> 
             <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
           </View>
         </View>
@@ -2456,17 +2488,14 @@ const OrdersScreenModal: React.FC<{
               resizeMode="cover"
             />
           )}
-         
           <View style={styles.orderDetails}>
             <Text style={[styles.orderProductTitle, { color: theme.text }]} numberOfLines={2}>
               {productName}
               {item.order_items?.length > 1 && ` +${item.order_items.length - 1} more`}
             </Text>
-           
-            <Text style={[styles.orderProductPrice, { color: theme.primary }]}>
+            <Text style={[styles.orderProductPrice, { color: theme.primary }]}> 
               GHS {item.total_amount?.toFixed(2) || '0.00'}
             </Text>
-           
             <View style={styles.sellerInfo}>
               <Image
                 source={{ uri: avatarUrl }}
@@ -2474,27 +2503,24 @@ const OrdersScreenModal: React.FC<{
               />
               <Text style={[styles.sellerName, { color: theme.textSecondary }]}>Shop: {shopData.name}</Text>
             </View>
-            <Text style={[styles.orderDeliveryInfo, { color: theme.textTertiary }]}>
+            <Text style={[styles.orderDeliveryInfo, { color: theme.textTertiary }]}> 
               {formatDeliveryOption(item.delivery_option)} • {item.location || 'No location specified'}
             </Text>
           </View>
         </View>
-        <View style={[styles.orderFooter, { borderTopColor: theme.border }]}>
-          <Text style={[styles.orderItemsCount, { color: theme.textTertiary }]}>
+        <View style={[styles.orderFooter, { borderTopColor: theme.border }]}> 
+          <Text style={[styles.orderItemsCount, { color: theme.textTertiary }]}> 
             {item.order_items?.length || 1} item{item.order_items?.length !== 1 ? 's' : ''}
           </Text>
-         
           <TouchableOpacity
             style={[styles.orderActionButton, { backgroundColor: theme.primary }]}
             onPress={() => {
-              const product = getProductFromOrder(item);
               onViewProductDetails(item, product);
             }}
           >
             <Ionicons name="eye-outline" size={16} color="#fff" />
             <Text style={styles.orderActionButtonText}>View Details</Text>
           </TouchableOpacity>
-         
           {item.status === 'pending' && (
             <TouchableOpacity
               style={[styles.orderActionButton, styles.cancelOrderButton, { backgroundColor: theme.error }]}
@@ -2521,26 +2547,27 @@ const OrdersScreenModal: React.FC<{
               <Text style={styles.orderActionButtonText}>Cancel Order</Text>
             </TouchableOpacity>
           )}
-         
           {item.status === 'cancelled' && (
-            <View style={[styles.orderActionButton, { backgroundColor: theme.textTertiary }]}>
+            <View style={[styles.orderActionButton, { backgroundColor: theme.textTertiary }]}> 
               <Ionicons name="close-circle" size={16} color="#fff" />
               <Text style={styles.orderActionButtonText}>Cancelled</Text>
             </View>
           )}
-         
           {item.status === 'processing' && (
-            <View style={[styles.orderActionButton, { backgroundColor: theme.info }]}>
+            <View style={[styles.orderActionButton, { backgroundColor: theme.info }]}> 
               <Ionicons name="time" size={16} color="#fff" />
               <Text style={styles.orderActionButtonText}>Processing</Text>
             </View>
           )}
-         
-          {item.status === 'completed' && (
-            <View style={[styles.orderActionButton, { backgroundColor: theme.success }]}>
-              <Ionicons name="checkmark-circle" size={16} color="#fff" />
-              <Text style={styles.orderActionButtonText}>Completed</Text>
-            </View>
+          {item.status === 'completed' && propsCurrentUserId && product?.id && (
+            <ProductReviewsSection
+              productId={product.id}
+              currentUserId={propsCurrentUserId}
+              theme={theme}
+              showAlert={showAlert}
+              onRequireAuth={() => showAlert('Login Required', 'Please log in to leave a review.')}
+              showOnlyAddButton
+            />
           )}
         </View>
       </View>
@@ -2800,7 +2827,7 @@ const OrdersScreenModal: React.FC<{
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.ordersListContainer}
-              renderItem={renderOrderItem}
+              renderItem={(props) => renderOrderItem({ ...props, propsCurrentUserId: currentUserId })}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -3167,6 +3194,18 @@ const CommentsModal: React.FC<{
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
 }> = ({ isVisible, onClose, product, showAlert, theme }) => {
+  const router = useRouter();
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
+
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3244,7 +3283,10 @@ const CommentsModal: React.FC<{
     setIsSubmitting(true);
     try {
       const userId = await getCurrentUserId();
-      if (!userId) throw new Error('Not logged in');
+      if (!userId) {
+        requireAuth('comment');
+        return;
+      }
       const { error } = await supabase.from('product_comments').insert({ product_id: productId, user_id: userId, comment_text: comment.trim() });
       if (error) throw error;
       setComment('');
@@ -3332,8 +3374,20 @@ const SimilarProductsSection: React.FC<{
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
 }> = ({ product, onProductSelect, onAddToCart, cartItems = [], showAlert, theme }) => {
+  const router = useRouter();
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
 
   const fetchSimilarProducts = useCallback(async () => {
     console.log('Fetching similar products for:', product.id, product.title);
@@ -3586,6 +3640,12 @@ const SimilarProductsSection: React.FC<{
   }, [product.id, fetchSimilarProducts]);
 
   const handleAddToCart = async (productItem: Product) => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      requireAuth('add items to your cart');
+      return;
+    }
+
     try {
       await onAddToCart(productItem);
       showAlert('Success', 'Product added to cart!');
@@ -4833,6 +4893,18 @@ const ProductDetailModal: React.FC<{
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
 }> = ({ isVisible, onClose, product, onOpenFullViewer, onSelectSimilarProduct, onAddToCart, isInCart, cartItems = [], onPlaceOrder, fromCart = false, fromSellerProfile = false, showAlert, theme }) => {
+  const router = useRouter();
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
+
   const [addingToCart, setAddingToCart] = useState(false);
   const [productWithSeller, setProductWithSeller] = useState<Product | null>(null);
   const [loadingSeller, setLoadingSeller] = useState(false);
@@ -4990,6 +5062,12 @@ const ProductDetailModal: React.FC<{
 
   const handleAddToCart = async () => {
     if (!product) return;
+
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      requireAuth('add items to your cart');
+      return;
+    }
     
     // Check if product is out of stock
     const isOutOfStock = checkIfOutOfStock();
@@ -5027,6 +5105,13 @@ const ProductDetailModal: React.FC<{
 
   const handlePlaceOrder = () => {
     if (!product) return;
+
+    // Require auth before opening the order flow
+    // (Search tab blocks immediately; do the same here)
+    if (!currentUserId) {
+      requireAuth('place an order');
+      return;
+    }
     
     // Check if product is out of stock
     const isOutOfStock = checkIfOutOfStock();
@@ -5492,6 +5577,7 @@ const ProductDetailModal: React.FC<{
                     currentUserId={currentUserId}
                     theme={theme}
                     showAlert={showAlert}
+                    onRequireAuth={() => requireAuth('leave a review')}
                   />
                 )}
                 
@@ -5573,6 +5659,7 @@ const SellerProfileModal: React.FC<{
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
 }> = ({ isVisible, onClose, sellerId, onOpenProduct, onAddToCart, onPlaceOrder, showAlert, theme }) => {
+  const router = useRouter();
   const [seller, setSeller] = useState<any>({
     display_name: '',
     avatar_url: '',
@@ -5584,6 +5671,17 @@ const SellerProfileModal: React.FC<{
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [profilePhotoVisible, setProfilePhotoVisible] = useState(false);
+
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
 
   useEffect(() => {
     if (!isVisible || !sellerId) return;
@@ -5675,6 +5773,12 @@ const SellerProfileModal: React.FC<{
   }, [isVisible, sellerId]);
 
   const handleAddToCart = async (product: Product) => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      requireAuth('add items to your cart');
+      return;
+    }
+
     try {
       await onAddToCart(product);
       showAlert('Success', 'Product added to cart!');
@@ -5810,6 +5914,18 @@ const ProductFeedCard: React.FC<{
   const { width: windowWidth } = useWindowDimensions();
   const isLargeScreenCard = windowWidth >= 768;
   const router = useRouter();
+
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please log in or sign up to ${action}.`,
+      [
+        { text: 'Maybe later', style: 'cancel' },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
+
   const [showHeart, setShowHeart] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const [shareMenuVisible, setShareMenuVisible] = useState(false);
@@ -5837,7 +5953,7 @@ const ProductFeedCard: React.FC<{
       setLikeLoading(true);
       const userId = await getCurrentUserId();
       if (!userId) {
-        showAlert('Login Required', 'Please log in to like');
+        requireAuth('like');
         setLikeLoading(false);
         return;
       }
@@ -5928,7 +6044,7 @@ const ProductFeedCard: React.FC<{
       const userId = await getCurrentUserId();
       
       if (!userId) {
-        showAlert('Login Required', 'Please log in to share');
+        requireAuth('share');
         return;
       }
       
@@ -5982,7 +6098,7 @@ const ProductFeedCard: React.FC<{
   const handleFollowToggle = async () => {
     const userId = await getCurrentUserId();
     if (!userId) {
-      showAlert('Login Required', 'Please log in to follow');
+      requireAuth('follow');
       return;
     }
     const newFollowed = !item.isFollowed;
@@ -6011,7 +6127,7 @@ const ProductFeedCard: React.FC<{
     
     const userId = await getCurrentUserId();
     if (!userId) {
-      showAlert('Login Required', 'Please log in to like');
+      requireAuth('like');
       return;
     }
     
@@ -6065,6 +6181,12 @@ const ProductFeedCard: React.FC<{
   };
 
   const handleAddToCart = async () => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      requireAuth('add items to your cart');
+      return;
+    }
+
     setAddingToCart(true);
     try {
       await onAddToCart(item);
@@ -6077,7 +6199,14 @@ const ProductFeedCard: React.FC<{
   };
 
   const handlePlaceOrder = () => {
-    onPlaceOrder(item);
+    // Mirror Search behavior: block immediately for guests
+    getCurrentUserId().then((userId) => {
+      if (!userId) {
+        requireAuth('place an order');
+        return;
+      }
+      onPlaceOrder(item);
+    });
   };
 
   return (
@@ -6437,11 +6566,22 @@ export default function BuyerScreen() {
     });
   };
 
+  const requireAuth = (action: string = 'continue') => {
+    showAlert(
+      'Login Required',
+      `Please sign up or log in to ${action}.`,
+      [
+        { text: 'Maybe later', onPress: () => {} },
+        { text: 'Login / Sign up', onPress: () => router.push('/auth') },
+      ],
+    );
+  };
+
   const hideAlert = () => {
     setAlert(prev => ({ ...prev, visible: false }));
   };
 
-  // Load user university on mount
+  // Load selected campus (university) on mount
   useEffect(() => {
     const loadUserUniversity = async () => {
       try {
@@ -7173,7 +7313,22 @@ export default function BuyerScreen() {
   };
 
   const handleAddToCart = async (product: Product) => {
-    const newCartItems = await addToCart(product);
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        requireAuth('add items to your cart');
+        return;
+      }
+
+      await addToCart(product);
+    } catch (error: any) {
+      if (String(error?.message || '').toLowerCase().includes('not authenticated')) {
+        requireAuth('add items to your cart');
+        return;
+      }
+      showAlert('Error', error?.message || 'Failed to add product to cart');
+      return;
+    }
    
     setProducts(prev => prev.map(p =>
       p.id === product.id ? { ...p, inCart: true } : p
@@ -7191,7 +7346,22 @@ export default function BuyerScreen() {
   };
 
   const handleRemoveFromCart = async (productId: string) => {
-    const newCartItems = await removeFromCart(productId);
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        requireAuth('manage your cart');
+        return;
+      }
+
+      await removeFromCart(productId);
+    } catch (error: any) {
+      if (String(error?.message || '').toLowerCase().includes('not authenticated')) {
+        requireAuth('manage your cart');
+        return;
+      }
+      showAlert('Error', error?.message || 'Failed to remove item from cart');
+      return;
+    }
    
     setProducts(prev => prev.map(p =>
       p.id === productId ? { ...p, inCart: false } : p
@@ -7201,12 +7371,41 @@ export default function BuyerScreen() {
   };
 
   const handleUpdateQuantity = async (productId: string, quantity: number) => {
-    await updateQuantity(productId, quantity);
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        requireAuth('update your cart');
+        return;
+      }
+
+      await updateQuantity(productId, quantity);
+    } catch (error: any) {
+      if (String(error?.message || '').toLowerCase().includes('not authenticated')) {
+        requireAuth('update your cart');
+        return;
+      }
+      showAlert('Error', error?.message || 'Failed to update quantity');
+    }
     // no return value to match expected Promise<void> signature
   };
 
   const handleClearCart = async () => {
-    await clearCart();
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        requireAuth('clear your cart');
+        return;
+      }
+
+      await clearCart();
+    } catch (error: any) {
+      if (String(error?.message || '').toLowerCase().includes('not authenticated')) {
+        requireAuth('clear your cart');
+        return;
+      }
+      showAlert('Error', error?.message || 'Failed to clear cart');
+      return;
+    }
    
     setProducts(prev => prev.map(p => ({ ...p, inCart: false })));
    
@@ -7215,14 +7414,29 @@ export default function BuyerScreen() {
     }
   };
 
-  const handlePlaceOrder = (product: Product, options?: { selectedColor?: string | null; selectedSize?: string | null; quantity?: number | null }) => {
+  const handlePlaceOrder = async (
+    product: Product,
+    options?: { selectedColor?: string | null; selectedSize?: string | null; quantity?: number | null },
+  ) => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      requireAuth('place an order');
+      return;
+    }
+
     setOrderForProduct(product);
     setIsCartOrder(false);
     setOrderInitialOptions(options || null);
     setOrderFormVisible(true);
   };
 
-  const handleCartPlaceOrder = () => {
+  const handleCartPlaceOrder = async () => {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      requireAuth('place an order');
+      return;
+    }
+
     if (cartItems.length === 0) return;
     setOrderForProduct(null);
     setIsCartOrder(true);
@@ -7234,7 +7448,7 @@ export default function BuyerScreen() {
     try {
       const userId = await getCurrentUserId();
       if (!userId) {
-        showAlert('Login Required', 'Please log in to place an order');
+        requireAuth('place an order');
         throw new Error('Please log in to place an order');
       }
       
@@ -7575,7 +7789,7 @@ export default function BuyerScreen() {
     const userId = await getCurrentUserId();
    
     if (!userId) {
-      showAlert('Login Required', 'Please log in to share');
+      requireAuth('share');
       return;
     }
     try {
@@ -7622,24 +7836,10 @@ export default function BuyerScreen() {
     minimumViewTime: 300,
   }).current;
 
-  // Get current user's university
+  // Get selected campus university (works even when not logged in)
   const getCurrentUserUniversity = async () => {
     try {
-      const userId = await getCurrentUserId();
-      if (!userId) return null;
-      
-      const { data: userProfile, error } = await supabase
-        .from('user_profiles')
-        .select('university')
-        .eq('id', userId)
-        .single();
-      
-      if (error) {
-        console.error('Error fetching user university:', error);
-        return null;
-      }
-      
-      return userProfile?.university;
+      return await getSelectedCampus();
     } catch (error) {
       console.error('Error in getCurrentUserUniversity:', error);
       return null;
@@ -7667,7 +7867,14 @@ export default function BuyerScreen() {
       const currentUserId = await getCurrentUserId();
       
       if (!currentUserUniversity) {
-        showAlert('University Required', 'Please update your university in your profile to see products');
+        showAlert(
+          'Campus Required',
+          'Please select your campus to see products.',
+          [
+            { text: 'Not now', onPress: () => {} },
+            { text: 'Select Campus', onPress: () => router.push('/onboarding') },
+          ],
+        );
         setLoadingInitial(false);
         setLoadingMore(false);
         return;
@@ -7958,9 +8165,14 @@ export default function BuyerScreen() {
         <TouchableOpacity
           style={styles.headerIcon}
           onPress={async () => {
+            const userId = await getCurrentUserId();
+            if (!userId) {
+              requireAuth('view your orders');
+              return;
+            }
+
             setOrdersModalVisible(true);
             // Clear notification count when viewing orders
-            const userId = await getCurrentUserId();
             if (userId) {
               await supabase
                 .from('buyer_notifications')
@@ -7987,7 +8199,14 @@ export default function BuyerScreen() {
        
         <TouchableOpacity
           style={styles.headerIcon}
-          onPress={() => setCartVisible(true)}
+          onPress={async () => {
+            const userId = await getCurrentUserId();
+            if (!userId) {
+              requireAuth('view your cart');
+              return;
+            }
+            setCartVisible(true);
+          }}
         >
           <Ionicons 
             name="cart-outline" 

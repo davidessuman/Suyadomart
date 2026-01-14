@@ -106,6 +106,7 @@ const GHANA_UNIVERSITIES = [
   'University of Mines and Technology', 
   'University of Health and Allied Sciences', 
   'Ghana Institute of Management and Public Administration',
+  'University of Professional Studies, Accra',
   'Accra Technical University', 
   'Kumasi Technical University', 
   'Takoradi Technical University', 
