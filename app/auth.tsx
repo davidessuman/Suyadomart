@@ -97,9 +97,9 @@ const checkPasswordStrength = (password: string) => {
 
 // Username validation
 const validateUsername = (username: string) => {
-  if (username.length < 3) return { valid: false, message: 'Username must be at least 3 characters' };
-  if (username.length > 20) return { valid: false, message: 'Username must be less than 20 characters' };
-  if (!/^[a-zA-Z0-9_]+$/.test(username)) return { valid: false, message: 'Only letters, numbers, and underscores allowed' };
+  const trimmed = username.trim();
+  if (trimmed.length < 3) return { valid: false, message: 'Username must be at least 3 characters' };
+  if (trimmed.length > 20) return { valid: false, message: 'Username must be less than 20 characters' };
   return { valid: true, message: '' };
 };
 
@@ -251,11 +251,67 @@ const AuthPage = () => {
     return () => clearTimeout(debounce);
   }, [username, isLogin]);
 
+  // Abbreviation mapping (copied from onboarding)
+  const UNIVERSITY_ABBREVIATIONS = {
+    UG: 'University of Ghana',
+    KNUST: 'Kwame Nkrumah University of Science and Technology',
+    UCC: 'University of Cape Coast',
+    UEW: 'University of Education, Winneba',
+    UDS: 'University for Development Studies',
+    UENR: 'University of Energy and Natural Resources',
+    UMAT: 'University of Mines and Technology',
+    UHAS: 'University of Health and Allied Sciences',
+    GIMPA: 'Ghana Institute of Management and Public Administration',
+    UPSA: 'University of Professional Studies, Accra',
+    ATU: 'Accra Technical University',
+    KTU: 'Kumasi Technical University',
+    TTU: 'Takoradi Technical University',
+    HTU: 'Ho Technical University',
+    CCTU: 'Cape Coast Technical University',
+    BTU: 'Bolgatanga Technical University',
+    KoforiduaTU: 'Koforidua Technical University',
+    TamaleTU: 'Tamale Technical University',
+    STU: 'Sunyani Technical University',
+    REGENT: 'Regent University College of Science and Technology',
+    ASHESI: 'Ashesi University',
+    CENTRAL: 'Central University',
+    VVU: 'Valley View University',
+    PENTECOST: 'Pentecost University',
+    METHODIST: 'Methodist University College Ghana',
+    PRESBY: 'Presbyterian University College, Ghana',
+    CATHOLIC: 'Catholic University College of Ghana',
+    CSUC: 'Christian Service University College',
+    WISCONSIN: 'Wisconsin International University College, Ghana',
+    LANCASTER: 'Lancaster University Ghana',
+    ACADEMIC: 'Academic City University College',
+    RADFORD: 'Radford University College',
+  };
+
+  // Helper to get acronym from university name, skipping stopwords
+  const ACRONYM_STOPWORDS = new Set(['of', 'for', 'and', 'the', 'in', 'at', 'on']);
+  function getAcronym(name) {
+    return name
+      .split(/\s+/)
+      .filter((w) => /[A-Za-z]/.test(w[0]) && !ACRONYM_STOPWORDS.has(w.toLowerCase()))
+      .map((w) => w[0].toUpperCase())
+      .join('');
+  }
+
   const filteredUniversities = useMemo(() => {
-    if (!universitySearch) return GHANA_UNIVERSITIES;
-    return GHANA_UNIVERSITIES.filter(uni =>
-      uni.toLowerCase().includes(universitySearch.toLowerCase())
+    const q = universitySearch.trim().toLowerCase();
+    if (!q) return GHANA_UNIVERSITIES;
+    // Check if the search matches a known abbreviation
+    const abbrMatch = Object.entries(UNIVERSITY_ABBREVIATIONS).find(
+      ([abbr, name]) => abbr.toLowerCase() === q
     );
+    if (abbrMatch) {
+      return [abbrMatch[1]];
+    }
+    return GHANA_UNIVERSITIES.filter((u) => {
+      const name = u.toLowerCase();
+      const acronym = getAcronym(u).toLowerCase();
+      return name.includes(q) || acronym.includes(q);
+    });
   }, [universitySearch]);
 
   const isEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -1188,7 +1244,7 @@ const AuthPage = () => {
                       {username && usernameAvailable === true && (
                         <Text style={{ color: colors.success }}>Username available!</Text>
                       )}
-                      {!username && '3-20 characters, letters, numbers, and underscores only'}
+                      {!username && '3-20 characters.'}
                     </Text>
                   </View>
                 )}

@@ -3383,6 +3383,20 @@ function SellerDashboardContent() {
       });
       return;
     }
+    // Custom validation: If cover is video and there are no images
+    if (
+      !editingProduct &&
+      selectedMedia.length > 0 &&
+      selectedMedia[0].type === 'video' &&
+      !selectedMedia.some(m => m.type === 'image')
+    ) {
+      showAlert({
+        title: 'Required',
+        message: 'Please add at least one image to your product before publishing',
+        type: 'warning'
+      });
+      return;
+    }
    
     if (!editingProduct) {
       if (!mainCategory) {

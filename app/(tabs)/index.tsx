@@ -1025,24 +1025,29 @@ const ContactSellerModal: React.FC<{
     let message = '';
     
     const productWebLink = generateProductWebLink(product);
-    const productImageUrl = product.media_urls?.[0] ? 
-      (product.media_urls[0].startsWith('http') ? 
-        product.media_urls[0] : 
-        `${SUPABASE_URL}/storage/v1/object/public/products/${product.media_urls[0]}`) 
-      : '';
+    let productImageUrl = '';
+    if (order && order.selected_color && product.color_media && product.color_media[order.selected_color] && product.color_media[order.selected_color].length > 0) {
+      const colorMediaUrl = product.color_media[order.selected_color][0];
+      productImageUrl = colorMediaUrl.startsWith('http') ? colorMediaUrl : `${SUPABASE_URL}/storage/v1/object/public/products/${colorMediaUrl}`;
+    } else if (product.media_urls?.[0]) {
+      productImageUrl = product.media_urls[0].startsWith('http') ? product.media_urls[0] : `${SUPABASE_URL}/storage/v1/object/public/products/${product.media_urls[0]}`;
+    } else {
+      productImageUrl = '';
+    }
     
     if (order) {
       message = `Hello! I'm the buyer for order #${order.id.slice(-8)}:\n\n` +
-                `📱 *Product*: ${product.title}\n` +
-                `💰 *Price*: GHS ${product.price.toFixed(2)}\n` +
-                `🔗 *Product Link*: ${productWebLink}\n` +
-                `🖼️ *Product Image*: ${productImageUrl}\n\n` +
-                `📦 *Order Status*: ${getStatusText(order.status)}\n` +
-                `📝 *My Name*: ${order.buyer_name}\n` +
-                `📞 *My Phone*: ${order.phone_number}\n` +
-                `📍 *Location*: ${order.location}\n` +
-                `🚚 *Delivery*: ${formatDeliveryOption(order.delivery_option)}\n\n` +
-                `I'd like to discuss my order.`;
+            `📱 *Product*: ${product.title}\n` +
+            `💰 *Price*: GHS ${product.price.toFixed(2)}\n` +
+            (order.selected_color ? `🎨 *Colour*: ${order.selected_color}\n` : '') +
+            `🔗 *Product Link*: ${productWebLink}\n` +
+            `🖼️ *Product Image*: ${productImageUrl}\n\n` +
+            `📦 *Order Status*: ${getStatusText(order.status)}\n` +
+            `📝 *My Name*: ${order.buyer_name}\n` +
+            `📞 *My Phone*: ${order.phone_number}\n` +
+            `📍 *Location*: ${order.location}\n` +
+            `🚚 *Delivery*: ${formatDeliveryOption(order.delivery_option)}\n\n` +
+            `I'd like to discuss my order.`;
     } else {
       const productDescription = product.description || product.title || 'Check out this product';
      
@@ -1334,6 +1339,11 @@ const ShareModal: React.FC<{
   ];
 
   const generateImageUrl = (product: Product) => {
+    // If color is selected and color_media exists, use color-specific media
+    if (order && order.selected_color && product.color_media && product.color_media[order.selected_color] && product.color_media[order.selected_color].length > 0) {
+      const colorMediaUrl = product.color_media[order.selected_color][0];
+      return colorMediaUrl.startsWith('http') ? colorMediaUrl : `${SUPABASE_URL}/storage/v1/object/public/products/${colorMediaUrl}`;
+    }
     if (product.media_urls?.[0]) {
       if (product.media_urls[0].startsWith('http')) {
         return product.media_urls[0];
@@ -1470,8 +1480,8 @@ const ShareModal: React.FC<{
                 GHS {product.price.toFixed(2)}
               </Text>
               {product.hasDiscount && (
-                <View style={styles.shareDiscountBadge}>
-                  <Text style={styles.shareDiscountText}>SAVE {product.discountPercent}%</Text>
+                <View style={styles.modalDiscountBadge}>
+                  <Text style={styles.modalDiscountText}>-{product.discountPercent}%</Text>
                 </View>
               )}
               <Text style={[styles.shareSourceText, { color: theme.textTertiary }]}>
@@ -1764,16 +1774,18 @@ useEffect(() => {
 
                 <Text style={[styles.modalTitle, { color: theme.text }]}>{product.title}</Text>
                 <View style={styles.modalPriceRow}>
-                  <Text style={[styles.modalPrice, { color: theme.primary }]}>
-                    <Text style={[styles.modalCurrency, { color: theme.primary }]}>GHS</Text> {Number(product.price).toFixed(2)}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.modalPrice, { color: theme.primary }]}> 
+                      <Text style={[styles.modalCurrency, { color: theme.primary }]}>GHS</Text> {Number(product.price).toFixed(2)}
+                    </Text>
+                  </View>
                   {product.hasDiscount && (
-                    <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                       <Text style={[styles.modalOldPrice, { color: theme.textTertiary }]}>GHS {Number(product.original_price).toFixed(2)}</Text>
                       <View style={styles.modalDiscountBadge}>
                         <Text style={styles.modalDiscountText}>-{product.discountPercent}%</Text>
                       </View>
-                    </>
+                    </View>
                   )}
                 </View>
                 
@@ -8880,8 +8892,20 @@ const styles = StyleSheet.create({
   modalCurrency: { fontSize: 18, fontWeight: '600' },
   modalPrice: { fontSize: 36, fontWeight: '900' },
   modalOldPrice: { fontSize: 18, textDecorationLine: 'line-through', marginLeft: 15, marginBottom: 4 },
-  modalDiscountBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, marginLeft: 10, marginBottom: 4 },
-  modalDiscountText: { color: '#ef8103ff', fontWeight: '900', fontSize: 13 },
+  modalDiscountBadge: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: 10,
+    marginBottom: 4,
+  },
+  modalDiscountText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   modalSectionTitle: { fontSize: 20, fontWeight: '700', marginTop: 15, marginBottom: 10, borderBottomWidth: 1, paddingBottom: 5 },
   modalDescription: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
   deliveryInfoContainer: {
