@@ -1325,10 +1325,11 @@ const ShareModal: React.FC<{
   isVisible: boolean;
   onClose: () => void;
   product: Product;
+  order?: any;
   onShare: (platform: string) => Promise<void>;
   showAlert: (title: string, message: string, buttons?: any[]) => void;
   theme: any;
-}> = ({ isVisible, onClose, product, onShare, showAlert, theme }) => {
+}> = ({ isVisible, onClose, product, order, onShare, showAlert, theme }) => {
   const shareOptions = [
     { id: 'whatsapp', name: 'WhatsApp', icon: 'logo-whatsapp', iconType: 'ionicons', color: '#25D366', scheme: 'whatsapp://send?text=' },
     { id: 'facebook', name: 'Facebook', icon: 'logo-facebook', iconType: 'ionicons', color: '#1877F2', scheme: 'fb://share?text=' },
@@ -6460,6 +6461,7 @@ const ProductFeedCard: React.FC<{
         isVisible={shareMenuVisible}
         onClose={() => setShareMenuVisible(false)}
         product={item}
+        order={null}
         onShare={handleShareToPlatform}
         showAlert={showAlert}
         theme={theme}
@@ -8899,6 +8901,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginLeft: 10,
     marginBottom: 4,
+    maxWidth: 60,
+    alignSelf: 'flex-start',
   },
   modalDiscountText: {
     color: '#FFF',
