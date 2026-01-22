@@ -4034,36 +4034,26 @@ export default function SearchScreen() {
         .from('products')
         .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .order('created_at', { ascending: false })
-        .limit(10);
-
-      // Apply university filter for non-sellers
-      if (userUniversity && !isUserSeller) {
-        // We'll filter after fetching by checking seller universities
-      }
+        .limit(20); // Fetch more to ensure enough for both sections
 
       const { data, error } = await query;
-
       if (error) throw error;
 
       if (data) {
         const enrichedProducts = await enrichProductsWithSellerInfo(data as any);
-        
-        // Filter by university for non-sellers
         let filteredProducts = enrichedProducts;
         if (userUniversity && !isUserSeller) {
-          filteredProducts = enrichedProducts.filter(product => 
-            product.university === userUniversity
-          );
+          filteredProducts = enrichedProducts.filter(product => product.university === userUniversity);
         }
-        
-        // If user is seller, include their own products plus products from their university
         if (isUserSeller && userId) {
-          filteredProducts = enrichedProducts.filter(product => 
-            product.seller_id === userId || product.university === userUniversity
-          );
+          filteredProducts = enrichedProducts.filter(product => product.seller_id === userId || product.university === userUniversity);
         }
-        
-        return filteredProducts.slice(0, 4);
+        // Ensure at least 7 products
+        if (filteredProducts.length < 7) {
+          // If not enough, fetch more (remove limit and re-fetch, or just return all we have)
+          return filteredProducts;
+        }
+        return filteredProducts.slice(0, 7);
       }
       return [];
     } catch (error) {
@@ -4078,36 +4068,26 @@ export default function SearchScreen() {
         .from('products')
         .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .order('created_at', { ascending: false })
-        .limit(10);
-
-      // Apply university filter for non-sellers
-      if (userUniversity && !isUserSeller) {
-        // We'll filter after fetching by checking seller universities
-      }
+        .limit(20); // Fetch more to ensure enough for both sections
 
       const { data, error } = await query;
-
       if (error) throw error;
 
       if (data) {
         const enrichedProducts = await enrichProductsWithSellerInfo(data as any);
-        
-        // Filter by university for non-sellers
         let filteredProducts = enrichedProducts;
         if (userUniversity && !isUserSeller) {
-          filteredProducts = enrichedProducts.filter(product => 
-            product.university === userUniversity
-          );
+          filteredProducts = enrichedProducts.filter(product => product.university === userUniversity);
         }
-        
-        // If user is seller, include their own products plus products from their university
         if (isUserSeller && userId) {
-          filteredProducts = enrichedProducts.filter(product => 
-            product.seller_id === userId || product.university === userUniversity
-          );
+          filteredProducts = enrichedProducts.filter(product => product.seller_id === userId || product.university === userUniversity);
         }
-        
-        return filteredProducts.slice(4, 8);
+        // Ensure at least 7 products, and don't repeat featured
+        if (filteredProducts.length < 7) {
+          return filteredProducts;
+        }
+        // Optionally, skip the first 7 (if featured uses those), or just take the next 7
+        return filteredProducts.slice(7, 14);
       }
       return [];
     } catch (error) {

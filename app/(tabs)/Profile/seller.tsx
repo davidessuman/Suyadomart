@@ -3150,7 +3150,21 @@ function SellerDashboardContent() {
     }
   };
 
-  const openAddProduct = async (product?: any) => {
+  // State for guideline modal
+  const [showGuidelineModal, setShowGuidelineModal] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<any>(null);
+
+  // Show guideline first, then product modal
+  const openAddProduct = (product?: any) => {
+    setPendingProduct(product || null);
+    setShowGuidelineModal(true);
+  };
+
+  // Call this after guideline is acknowledged
+  const proceedToAddProduct = async () => {
+    const product = pendingProduct;
+    setShowGuidelineModal(false);
+    setPendingProduct(null);
     if (product) {
       const { data: fullProduct, error } = await supabase.from('products').select('*').eq('id', String(product.id)).single();
       if (error || !fullProduct) { 
@@ -3183,7 +3197,6 @@ function SellerDashboardContent() {
         uri: url, 
         type: url.includes('.mp4') ? 'video' as const : 'image' as const 
       })));
-      
       // Load color media assignments
       setColorMediaAssignments(fullProduct.color_media || {});
     } else {
@@ -3910,6 +3923,33 @@ function SellerDashboardContent() {
         initialIndex={fullViewerIndex}
       />
      
+      {/* Product Upload Guideline Modal */}
+      <Modal visible={showGuidelineModal} transparent animationType="fade" onRequestClose={() => setShowGuidelineModal(false)}>
+        <View style={{ flex: 1, backgroundColor: themeColors.modalOverlay, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: themeColors.card, borderRadius: 18, padding: 24, width: '100%', maxWidth: 400, alignItems: 'center' }}>
+            <Ionicons name="information-circle-outline" size={48} color={themeColors.primary} style={{ marginBottom: 12 }} />
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: themeColors.text, marginBottom: 8, textAlign: 'center' }}>Product Upload Guidelines</Text>
+            <Text style={{ color: "red", fontSize: 15, marginBottom: 28, textAlign: 'center' }}>
+              Follow these guidelines to make your products easily accessible to buyers ! </Text>
+            <View style={{ alignSelf: 'stretch', marginBottom: 18 }}>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Use clear and real photos of your product.</Text>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Use a detailed Title that accurately describes the product for easy search.</Text>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Description must accurately describe the product.</Text>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Set a fair price to be able to compete.</Text>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Select the correct category for your product.</Text>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Ensure you can fulfill orders promptly.</Text>
+              <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• For products with multiple colors, assign each color to the correct product images.</Text>
+            </View>
+            <TouchableOpacity onPress={proceedToAddProduct} style={{ backgroundColor: themeColors.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 32, marginBottom: 8 }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>I Understand, Continue</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setShowGuidelineModal(false); setPendingProduct(null); }}>
+              <Text style={{ color: themeColors.textSecondary, fontSize: 15, marginTop: 2 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add Product Modal - Custom Overlay Implementation */}
       {addProductModal && (
         <View style={{
@@ -3922,7 +3962,7 @@ function SellerDashboardContent() {
           backgroundColor: themeColors.modalOverlay,
         }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: themeColors.background }}>
-          <View style={[styles.modalHeader, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+          <View style={[styles.modalHeader, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}> 
             <TouchableOpacity onPress={closeAddProductModal}><Text style={[styles.cancelText, { color: themeColors.textSecondary }]}>Cancel</Text></TouchableOpacity>
             <Text style={[styles.modalTitle, { color: themeColors.text }]}>{editingProduct ? 'Edit Product' : 'New Listing'}</Text>
             <TouchableOpacity onPress={saveProduct} disabled={posting}><Text style={[styles.publishText, posting && { opacity: 0.5 }, { color: themeColors.primary }]}>{posting ? 'Saving...' : editingProduct ? 'Update' : 'Publish'}</Text></TouchableOpacity>

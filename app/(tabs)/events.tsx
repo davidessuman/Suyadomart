@@ -1715,7 +1715,7 @@ export default function EventsScreen() {
       const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
       const description = reminderEvent.description || '';
       const location = reminderEvent.venue || '';
-      // Only use device calendar, do not fallback to Google Calendar
+      // Only use device calendar on mobile; fallback to Google Calendar only on web
       if (Platform.OS === 'web' || !ExpoCalendar) {
         setShowGoogleCalendarOption(true);
         showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders.');
@@ -1736,7 +1736,9 @@ export default function EventsScreen() {
         calendarId = cals?.[0]?.id;
       }
       if (!calendarId) {
-        setShowGoogleCalendarOption(true);
+        if (Platform.OS === 'web') {
+          setShowGoogleCalendarOption(true);
+        }
         showAlert('Calendar Not Available', 'No calendar found on your device.');
         return;
       }
@@ -1758,7 +1760,9 @@ export default function EventsScreen() {
         setReminderModalVisible(false);
         showAlert('Success', 'Reminders added to your calendar.');
       } catch (e) {
-        setShowGoogleCalendarOption(true);
+        if (Platform.OS === 'web') {
+          setShowGoogleCalendarOption(true);
+        }
         showAlert('Error', 'Could not add reminders to your device calendar.');
       }
     } catch (e) {
@@ -1769,8 +1773,26 @@ export default function EventsScreen() {
       // Render Google Calendar option if device calendar is unavailable
       const renderGoogleCalendarOption = () => {
         if (!showGoogleCalendarOption) return null;
+        // Prepare event details for Google Calendar (web)
+        let eventProps = undefined;
+        if (reminderEvent) {
+          // Use the first reminder as the event time for add-to-calendar
+          let start: Date | undefined = undefined;
+          let end: Date | undefined = undefined;
+          if (reminderSelections.length && reminderSelections[0].times.length) {
+            start = buildDateFromStrings(reminderSelections[0].date, reminderSelections[0].times[0]);
+            end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+          }
+          eventProps = {
+            title: reminderEvent.title || '',
+            description: reminderEvent.description || '',
+            location: reminderEvent.venue || '',
+            start,
+            end,
+          };
+        }
         return (
-          <GoogleCalendarButton installed={googleCalendarInstalled} />
+          <GoogleCalendarButton installed={googleCalendarInstalled} event={eventProps} />
         );
       };
     const [reminderModalVisible, setReminderModalVisible] = useState(false);
