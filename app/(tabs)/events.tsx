@@ -1612,7 +1612,7 @@ export default function EventsScreen() {
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [feedView, setFeedView] = useState<'events' | 'announcements'>('events');
+  const [feedView, setFeedView] = useState<'events' | 'announcements'>('announcements');
   const [allAnnouncements, setAllAnnouncements] = useState<any[]>([]);
 
   // Search state
@@ -1668,6 +1668,179 @@ export default function EventsScreen() {
   const dotsAnim2 = useRef(new Animated.Value(0)).current;
   const dotsAnim3 = useRef(new Animated.Value(0)).current;
 
+  // Add reminder to device calendar using Expo Calendar
+  const handleAddReminderToCalendar = async () => {
+    if (!reminderEvent || !reminderSelections.length) return;
+    const eventDateTime = buildDateFromStrings(reminderEvent.date, reminderEvent.startTime);
+    // Validate all reminders
+    for (const sel of reminderSelections) {
+      for (const time of sel.times) {
+        const reminderDateTime = buildDateFromStrings(sel.date, time);
+        if (!reminderDateTime || !eventDateTime || reminderDateTime >= eventDateTime) {
+          showAlert('Invalid Reminder', 'All reminders must be set before the event start time.');
+          return;
+        }
+      }
+    }
+    try {
+      const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
+      const description = reminderEvent.description || '';
+      const location = reminderEvent.venue || '';
+      const openGoogleCalendar = () => {
+        const openStoreForGoogleCalendar = () => {
+          let storeUrl = '';
+          if (Platform.OS === 'ios') {
+            storeUrl = 'https://apps.apple.com/app/google-calendar/id909319292';
+          } else if (Platform.OS === 'android') {
+            storeUrl = 'https://play.google.com/store/apps/details?id=com.google.android.calendar';
+          } else if (Platform.OS === 'windows') {
+            storeUrl = 'https://apps.microsoft.com/store/detail/google-calendar/9WZDNCRFJ3Q8';
+          } else if (Platform.OS === 'macos') {
+            storeUrl = 'https://apps.apple.com/app/google-calendar/id909319292';
+          } else {
+            // fallback to web
+            storeUrl = 'https://calendar.google.com/';
+          }
+          window.open(storeUrl, '_blank');
+        };
+
+        let googleCalendarOpened = false;
+        for (const sel of reminderSelections) {
+          for (const time of sel.times) {
+            const startDate = buildDateFromStrings(sel.date, time);
+            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            const fmt = (d: Date) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+            const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(summary)}&dates=${fmt(startDate)}/${fmt(endDate)}&location=${encodeURIComponent(location)}&details=${encodeURIComponent(description)}`;
+            // Try to open Google Calendar app via protocol handler
+            if (Platform.OS === 'web') {
+              // Try to open app, fallback to store if not installed
+              const appProtocol = 'googlecalendar://';
+              let timeout = setTimeout(() => {
+                if (!googleCalendarOpened) {
+                  openStoreForGoogleCalendar();
+                }
+              }, 1200);
+              window.location.href = appProtocol;
+              window.addEventListener('blur', () => {
+                clearTimeout(timeout);
+                googleCalendarOpened = true;
+                // Open web Google Calendar as fallback if app is installed
+                window.open(gcUrl, '_blank');
+              }, { once: true });
+            } else {
+              // On native, open store if app is not installed
+              // (Assume not installed if error occurs)
+              try {
+                window.open(gcUrl, '_blank');
+              } catch {
+                openStoreForGoogleCalendar();
+              }
+            }
+          }
+        }
+        setReminderModalVisible(false);
+        showAlert('Success', 'Reminders sent to Google Calendar.');
+      };
+
+      const promptGoogleCalendar = () => {
+        // Ask user if they want to use Google Calendar
+        showAlert(
+          'Calendar Not Available',
+          'Your device calendar is not available or does not support reminders. Would you like to use Google Calendar instead?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Google Calendar', onPress: () => openGoogleCalendar() },
+          ]
+        );
+      };
+
+      if (Platform.OS === 'web') {
+        // Only open Google Calendar if the app is installed
+        // Try to detect Google Calendar app protocol handler
+        const testUrl = 'googlecalendar://';
+        const timeout = setTimeout(() => {
+          // If not installed, prompt user
+          promptGoogleCalendar();
+        }, 1000);
+        window.location.href = testUrl;
+        window.addEventListener('blur', () => clearTimeout(timeout));
+        return;
+      }
+      // Native: batch create events using Expo Calendar
+      if (!ExpoCalendar) {
+        promptGoogleCalendar();
+        return;
+      }
+      const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission Required', 'Please allow calendar access to add this reminder.');
+        return;
+      }
+      let calendarId;
+      try {
+        const defaultCal = await ExpoCalendar.getDefaultCalendarAsync();
+        calendarId = defaultCal?.id;
+      } catch {}
+      if (!calendarId) {
+        const cals = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
+        calendarId = cals?.[0]?.id;
+      }
+      if (!calendarId) {
+        promptGoogleCalendar();
+        return;
+      }
+      try {
+        for (const sel of reminderSelections) {
+          for (const time of sel.times) {
+            const startDate = buildDateFromStrings(sel.date, time);
+            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            await ExpoCalendar.createEventAsync(calendarId, {
+              title: summary,
+              startDate,
+              endDate,
+              location,
+              notes: description,
+              timeZone: undefined,
+            });
+          }
+        }
+        setReminderModalVisible(false);
+        showAlert('Success', 'Reminders added to your calendar.');
+      } catch (e) {
+        promptGoogleCalendar();
+      }
+    } catch (e) {
+      showAlert('Error', 'Could not add reminders to your device calendar.');
+    }
+  };
+    // --- Reminder Modal State ---
+    const [reminderModalVisible, setReminderModalVisible] = useState(false);
+    // Array of { date: string, times: string[] }
+    const [reminderSelections, setReminderSelections] = useState<{ date: string, times: string[] }[]>([]);
+    const [reminderEvent, setReminderEvent] = useState<EventItem | null>(null);
+    const [showReminderDatePicker, setShowReminderDatePicker] = useState(false);
+    const [editingReminderDate, setEditingReminderDate] = useState<string | null>(null);
+    const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
+    const [editingReminderTime, setEditingReminderTime] = useState<{ date: string, time: string | null } | null>(null);
+
+    // Helper: get min/max for reminder date
+    const getReminderMaxDate = () => {
+      if (!reminderEvent) return undefined;
+      return reminderEvent.date;
+    };
+
+    // Helper: is reminder valid (all selected reminders must be before event)
+    const isReminderValid = () => {
+      if (!reminderEvent || !reminderSelections.length) return false;
+      const eventDateTime = buildDateFromStrings(reminderEvent.date, reminderEvent.startTime);
+      return reminderSelections.every(sel =>
+        sel.times.length > 0 &&
+        sel.times.every(time => {
+          const dt = buildDateFromStrings(sel.date, time);
+          return dt < eventDateTime;
+        })
+      );
+    };
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -3865,29 +4038,7 @@ export default function EventsScreen() {
               flexWrap: isMobile ? 'wrap' : 'nowrap',
             }
           ]}>
-            <TouchableOpacity 
-              style={[
-                styles.feedToggleButton, 
-                feedView === 'events' && styles.feedToggleButtonActive,
-                { 
-                  backgroundColor: feedView === 'events' ? colors.primary : colors.card, 
-                  borderColor: colors.border,
-                  paddingHorizontal: isMobile ? 16 : 20,
-                  paddingVertical: isMobile ? 7 : 8,
-                  minWidth: isMobile ? 90 : 100,
-                }
-              ]}
-              onPress={() => setFeedView('events')}
-            >
-              <Text style={[
-                styles.feedToggleText,
-                { 
-                  color: feedView === 'events' ? '#FFFFFF' : colors.text,
-                  fontSize: isMobile ? 13 : 14,
-                }
-              ]}>Events</Text>
-            </TouchableOpacity>
-            
+            {/* Announcements button first */}
             <TouchableOpacity 
               style={[
                 styles.feedToggleButton, 
@@ -3909,6 +4060,29 @@ export default function EventsScreen() {
                   fontSize: isMobile ? 13 : 14,
                 }
               ]}>Announcements</Text>
+            </TouchableOpacity>
+            {/* Events button second */}
+            <TouchableOpacity 
+              style={[
+                styles.feedToggleButton, 
+                feedView === 'events' && styles.feedToggleButtonActive,
+                { 
+                  backgroundColor: feedView === 'events' ? colors.primary : colors.card, 
+                  borderColor: colors.border,
+                  paddingHorizontal: isMobile ? 16 : 20,
+                  paddingVertical: isMobile ? 7 : 8,
+                  minWidth: isMobile ? 90 : 100,
+                }
+              ]}
+              onPress={() => setFeedView('events')}
+            >
+              <Text style={[
+                styles.feedToggleText,
+                { 
+                  color: feedView === 'events' ? '#FFFFFF' : colors.text,
+                  fontSize: isMobile ? 13 : 14,
+                }
+              ]}>Events</Text>
             </TouchableOpacity>
           </View>
           
@@ -4281,7 +4455,33 @@ export default function EventsScreen() {
         </ScrollView>
       </View>
 
-      {(feedView === 'events' ? filteredEvents : filteredAnnouncements).length === 0 ? (
+      {/* Show login/signup message for events if not signed in, but always show the banner above */}
+      {feedView === 'events' && !currentUserId ? (
+        <>
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: colors.text, marginBottom: 8 }]}>Sign up or log in to see all events</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary, marginBottom: 20 }]}>Events are only visible to registered users. Announcements are always visible.</Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: colors.primary,
+                paddingHorizontal: 32,
+                paddingVertical: 14,
+                borderRadius: 24,
+                marginTop: 8,
+                alignItems: 'center',
+                shadowColor: colors.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
+              onPress={() => router.push('/auth')}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Sign up / Log in</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : ( (feedView === 'events' ? filteredEvents : filteredAnnouncements).length === 0 ? (
         <View style={styles.emptyContainer}>
           {isSearchActive ? (
             <>
@@ -4311,7 +4511,7 @@ export default function EventsScreen() {
             />
           }
         />
-      )}
+      ))}
 
       {/* ACTION MENU MODAL */}
       <Modal visible={showActionMenu} animationType="fade" transparent>
@@ -4734,11 +4934,153 @@ export default function EventsScreen() {
                 <View style={styles.eventDetailsActionButtons}>
                   <TouchableOpacity
                     style={[styles.eventDetailsActionButton, { backgroundColor: colors.primary }]}
-                    onPress={() => handleSetReminder(selectedEvent)}
+                    onPress={() => {
+                      setReminderEvent(selectedEvent);
+                      // Default: 6 hours before event time
+                      const eventDate = selectedEvent.date;
+                      const eventTime = selectedEvent.startTime || '12:00 PM';
+                      const eventDateTime = buildDateFromStrings(eventDate, eventTime);
+                      const defaultDate = eventDateTime ? new Date(eventDateTime.getTime() - 6 * 60 * 60 * 1000) : new Date();
+                      const defaultDay = defaultDate.toISOString().slice(0, 10);
+                      const defaultTime = defaultDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                      setReminderSelections([{ date: defaultDay, times: [defaultTime] }]);
+                      setReminderModalVisible(true);
+                    }}
                   >
                     <Text style={styles.eventDetailsActionButtonText}>⏰ Set Reminder</Text>
                   </TouchableOpacity>
                 </View>
+      {/* REMINDER MODAL */}
+      <Modal visible={reminderModalVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>  
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>  
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Set Reminders</Text>
+              <TouchableOpacity onPress={() => setReminderModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>  
+                <Text style={[styles.closeBtnText, { color: colors.textSecondary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Reminder Day</Text>
+              <TouchableOpacity
+                style={[styles.dateInputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setShowReminderDatePicker(true)}
+              >
+                <View style={[styles.dateInputIconContainer, { backgroundColor: colors.card }]}>  
+                  <Text style={[styles.dateInputIcon, { color: colors.primary }]}>📅</Text>
+                </View>
+                <View style={styles.dateInputTextContainer}>
+                  <Text style={[styles.dateInputLabel, { color: colors.text }]}>Select Day</Text>
+                  <Text style={[styles.dateInputValue, { color: colors.text }]}>{reminderSelections[0] ? formatFullDate(reminderSelections[0].date) : ''}</Text>
+                </View>
+                <Text style={[styles.dateInputArrow, { color: colors.textSecondary }]}>›</Text>
+              </TouchableOpacity>
+              {reminderSelections[0] && (
+                <View style={{ marginBottom: 12, padding: 10, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border }}>
+                  <Text style={{ color: colors.primary, fontWeight: '700' }}>{formatFullDate(reminderSelections[0].date)}</Text>
+                  {reminderSelections[0].times.length === 1 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                      <Text style={{ color: colors.text, fontSize: 15 }}>{formatTimeDisplay(reminderSelections[0].times[0])}</Text>
+                      <TouchableOpacity onPress={() => {
+                        setReminderSelections(reminderSelections => [{
+                          date: reminderSelections[0].date,
+                          times: []
+                        }]);
+                      }} style={{ marginLeft: 10, padding: 2, borderRadius: 6, backgroundColor: colors.error + '11' }}>
+                        <Text style={{ color: colors.error, fontSize: 16 }}>Remove ✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {reminderSelections[0].times.length === 0 && (
+                    <TouchableOpacity onPress={() => {
+                      setEditingReminderDate(reminderSelections[0].date);
+                      setEditingReminderTime({ date: reminderSelections[0].date, time: null });
+                      setShowReminderTimePicker(true);
+                    }} style={{ marginTop: 8, alignSelf: 'flex-start', padding: 4, borderRadius: 6, backgroundColor: colors.primary + '11' }}>
+                      <Text style={{ color: colors.primary }}>+ Set Time</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: isReminderValid() ? colors.primary : colors.textTertiary }]}
+                onPress={handleAddReminderToCalendar}
+                disabled={!isReminderValid()}
+              >
+                <Text style={styles.submitButtonText}>Add All to Calendar</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+        {/* Date Picker Modal for selecting the day */}
+        <Modal visible={showReminderDatePicker} transparent animationType="fade">
+          <View style={styles.timePickerOverlay}>
+            <View style={[styles.timePickerContainer, { backgroundColor: colors.card }]}>  
+              <View style={[styles.timePickerHeader, { borderBottomColor: colors.border }]}>  
+                <Text style={[styles.timePickerTitle, { color: colors.text }]}>Select Reminder Day</Text>
+                <TouchableOpacity onPress={() => setShowReminderDatePicker(false)} style={[styles.timePickerCloseButton, { backgroundColor: colors.surface }]}>  
+                  <Text style={[styles.timePickerClose, { color: colors.textSecondary }]}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Calendar
+                minDate={getTodayUTC()}
+                maxDate={getReminderMaxDate()}
+                onDayPress={(day: DateData) => {
+                  setReminderSelections([{ date: day.dateString, times: reminderSelections[0]?.times || [] }]);
+                  setShowReminderDatePicker(false);
+                }}
+                markedDates={reminderSelections[0] ? { [reminderSelections[0].date]: { selected: true, selectedColor: colors.primary, selectedTextColor: '#fff' } } : {}}
+                theme={{
+                  backgroundColor: colors.card,
+                  calendarBackground: colors.card,
+                  textSectionTitleColor: colors.textSecondary,
+                  selectedDayBackgroundColor: colors.primary,
+                  selectedDayTextColor: '#ffffff',
+                  todayTextColor: colors.primary,
+                  dayTextColor: colors.text,
+                  textDisabledColor: colors.border,
+                  arrowColor: colors.primary,
+                  monthTextColor: colors.text,
+                  textDayFontWeight: '600',
+                  textMonthFontWeight: 'bold',
+                  textDayHeaderFontWeight: '700',
+                  textDayFontSize: 15,
+                  textMonthFontSize: 18,
+                  textDayHeaderFontSize: 13,
+                }}
+                style={styles.calendarStyle}
+              />
+            </View>
+          </View>
+        </Modal>
+        {/* Time Picker Modal for adding time to a day */}
+        <Modal visible={showReminderTimePicker} transparent animationType="fade">
+          <View style={styles.timePickerOverlay}>
+            <View style={styles.timePickerContainer}>
+              <View style={styles.timePickerHeader}>
+                <Text style={styles.timePickerTitle}>Select Reminder Time</Text>
+                <TouchableOpacity onPress={() => setShowReminderTimePicker(false)} style={styles.timePickerCloseButton}>
+                  <Text style={styles.timePickerClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <AdvancedTimePicker
+                time={reminderEvent?.startTime || '12:00 PM'}
+                onTimeChange={time => {
+                  if (editingReminderDate) {
+                    setReminderSelections(prev => [{
+                      date: editingReminderDate,
+                      times: [time]
+                    }]);
+                  }
+                  setShowReminderTimePicker(false);
+                }}
+                label="Reminder Time"
+                colors={colors}
+              />
+            </View>
+          </View>
+        </Modal>
+      </Modal>
 
                 {/* Action Buttons for Own Events - Only show if viewing own event */}
                 {isViewingOwnEvent && (

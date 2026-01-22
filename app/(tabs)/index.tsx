@@ -31,8 +31,19 @@ import { formatDistanceToNow, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams, usePathname } from 'expo-router';
+
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 import { getSelectedCampus } from '@/lib/campus';
+
+// === PAYMENT SAFETY NOTICE COMPONENT (reused from search.tsx) ===
+const PaymentNotice = () => (
+  <View style={{ backgroundColor: '#FFF3CD', borderColor: '#FF9900', borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+    <Ionicons name="warning" size={22} color="#FF9900" style={{ marginRight: 8 }} />
+    <Text style={{ color: '#856404', fontWeight: 'bold', flex: 1 }}>
+      ⚠️ Please only make payment on delivery. Do not pay in advance to avoid scammers.
+    </Text>
+  </View>
+);
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const SUPABASE_PROJECT_REF = 'qwujadyqebfypyhfuwfl';
@@ -4203,6 +4214,8 @@ const OrderFormModal: React.FC<{
             <View style={{ width: 40 }} />
           </View>
           <ScrollView style={styles.orderFormContent} showsVerticalScrollIndicator={false}>
+            {/* Payment Safety Notice */}
+            <PaymentNotice />
             
             {/* Product Selection Section (for single product orders) */}
             {!isCartOrder && product && (
@@ -7145,6 +7158,8 @@ export default function BuyerScreen() {
                     </View>
                   </View>
 
+                  {/* Payment Safety Notice (above Order Information) */}
+                  <PaymentNotice />
                   {/* Order Information Section */}
                   <View style={[styles.orderInfoSection, { borderTopColor: theme.border }]}>
                     <Text style={[styles.modalSectionTitle, { color: theme.text, borderBottomColor: theme.border }]}>Order Information</Text>

@@ -25,6 +25,15 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+// === PAYMENT SAFETY NOTICE COMPONENT ===
+const PaymentNotice = () => (
+  <View style={{ backgroundColor: '#FFF3CD', borderColor: '#FF9900', borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+    <Ionicons name="warning" size={22} color="#FF9900" style={{ marginRight: 8 }} />
+    <Text style={{ color: '#856404', fontWeight: 'bold', flex: 1 }}>
+      ⚠️ Please only make payment on delivery. Do not pay in advance to avoid scammers.
+    </Text>
+  </View>
+);
 import { supabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { formatDistanceToNow } from 'date-fns';
@@ -801,7 +810,9 @@ const ProductDetailsSection: React.FC<{
   }
 
   return (
-    <View style={[styles.productDetailsSection, { borderBottomColor: borderColor }]}>
+    <View style={[styles.productDetailsSection, { borderBottomColor: borderColor }]}> 
+      {/* Payment Safety Notice */}
+      <PaymentNotice />
       <Text style={[styles.productDetailsTitle, { color: PRIMARY_COLOR }]}>Product Details</Text>
       
       {/* Product Preview with Selected Options */}
@@ -1255,6 +1266,7 @@ const OrderFormModal: React.FC<{
           </View>
 
           <ScrollView style={styles.orderFormContent}>
+
             {/* Product Details Section - Shows above contact info */}
             {!isCartOrder && product && (
               <ProductDetailsSection
@@ -1282,6 +1294,8 @@ const OrderFormModal: React.FC<{
                 onQuantityChange={() => {}}
               />
             )}
+
+
 
             <View style={styles.orderFormSection}>
               <Text style={[styles.orderFormSectionTitle, { color: PRIMARY_COLOR }]}>Contact Information</Text>
