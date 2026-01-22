@@ -7195,7 +7195,7 @@ export default function BuyerScreen() {
                     </View>
                     
                     <View style={styles.orderInfoRow}>
-                      <Ionicons name="pricetag-outline" size={16} color={theme.textTertiary} />
+                      <Ionicons name="pricetag-outline" size={15} color={theme.textTertiary} />
                       <Text style={[styles.orderInfoLabel, { color: theme.textSecondary }]}>Total Amount: </Text>
                       <Text style={[styles.orderInfoValue, { color: theme.primary }]}>
                         GHS {order.total_amount?.toFixed(2) || '0.00'}
