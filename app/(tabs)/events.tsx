@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
@@ -12,16 +13,16 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
-  Platform,
   Image,
   useColorScheme,
   Animated,
-  Linking,
   RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { ExpoCalendar } from '@/lib/expoCalendar';
+import { GoogleCalendarButton } from '../components/GoogleCalendarButton';
+// import { Linking, Platform } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
@@ -1669,6 +1670,34 @@ export default function EventsScreen() {
   const dotsAnim3 = useRef(new Animated.Value(0)).current;
 
   // Add reminder to device calendar using Expo Calendar
+  const [showGoogleCalendarOption, setShowGoogleCalendarOption] = useState(false);
+  const [googleCalendarInstalled, setGoogleCalendarInstalled] = useState(false);
+
+  // Helper to check if Google Calendar is installed
+  const checkGoogleCalendarInstalled = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const supported = await Linking.canOpenURL('intent://com.google.android.calendar/#Intent;scheme=package;end');
+        setGoogleCalendarInstalled(supported);
+      } catch {
+        setGoogleCalendarInstalled(false);
+      }
+    } else if (Platform.OS === 'ios') {
+      try {
+        const supported = await Linking.canOpenURL('googlecalendar://');
+        setGoogleCalendarInstalled(supported);
+      } catch {
+        setGoogleCalendarInstalled(false);
+      }
+    } else {
+      setGoogleCalendarInstalled(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showGoogleCalendarOption) checkGoogleCalendarInstalled();
+  }, [showGoogleCalendarOption]);
+
   const handleAddReminderToCalendar = async () => {
     if (!reminderEvent || !reminderSelections.length) return;
     const eventDateTime = buildDateFromStrings(reminderEvent.date, reminderEvent.startTime);
@@ -1686,89 +1715,10 @@ export default function EventsScreen() {
       const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
       const description = reminderEvent.description || '';
       const location = reminderEvent.venue || '';
-      const openGoogleCalendar = () => {
-        const openStoreForGoogleCalendar = () => {
-          let storeUrl = '';
-          if (Platform.OS === 'ios') {
-            storeUrl = 'https://apps.apple.com/app/google-calendar/id909319292';
-          } else if (Platform.OS === 'android') {
-            storeUrl = 'https://play.google.com/store/apps/details?id=com.google.android.calendar';
-          } else if (Platform.OS === 'windows') {
-            storeUrl = 'https://apps.microsoft.com/store/detail/google-calendar/9WZDNCRFJ3Q8';
-          } else if (Platform.OS === 'macos') {
-            storeUrl = 'https://apps.apple.com/app/google-calendar/id909319292';
-          } else {
-            // fallback to web
-            storeUrl = 'https://calendar.google.com/';
-          }
-          window.open(storeUrl, '_blank');
-        };
-
-        let googleCalendarOpened = false;
-        for (const sel of reminderSelections) {
-          for (const time of sel.times) {
-            const startDate = buildDateFromStrings(sel.date, time);
-            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-            const fmt = (d: Date) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-            const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(summary)}&dates=${fmt(startDate)}/${fmt(endDate)}&location=${encodeURIComponent(location)}&details=${encodeURIComponent(description)}`;
-            // Try to open Google Calendar app via protocol handler
-            if (Platform.OS === 'web') {
-              // Try to open app, fallback to store if not installed
-              const appProtocol = 'googlecalendar://';
-              let timeout = setTimeout(() => {
-                if (!googleCalendarOpened) {
-                  openStoreForGoogleCalendar();
-                }
-              }, 1200);
-              window.location.href = appProtocol;
-              window.addEventListener('blur', () => {
-                clearTimeout(timeout);
-                googleCalendarOpened = true;
-                // Open web Google Calendar as fallback if app is installed
-                window.open(gcUrl, '_blank');
-              }, { once: true });
-            } else {
-              // On native, open store if app is not installed
-              // (Assume not installed if error occurs)
-              try {
-                window.open(gcUrl, '_blank');
-              } catch {
-                openStoreForGoogleCalendar();
-              }
-            }
-          }
-        }
-        setReminderModalVisible(false);
-        showAlert('Success', 'Reminders sent to Google Calendar.');
-      };
-
-      const promptGoogleCalendar = () => {
-        // Ask user if they want to use Google Calendar
-        showAlert(
-          'Calendar Not Available',
-          'Your device calendar is not available or does not support reminders. Would you like to use Google Calendar instead?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Google Calendar', onPress: () => openGoogleCalendar() },
-          ]
-        );
-      };
-
-      if (Platform.OS === 'web') {
-        // Only open Google Calendar if the app is installed
-        // Try to detect Google Calendar app protocol handler
-        const testUrl = 'googlecalendar://';
-        const timeout = setTimeout(() => {
-          // If not installed, prompt user
-          promptGoogleCalendar();
-        }, 1000);
-        window.location.href = testUrl;
-        window.addEventListener('blur', () => clearTimeout(timeout));
-        return;
-      }
-      // Native: batch create events using Expo Calendar
-      if (!ExpoCalendar) {
-        promptGoogleCalendar();
+      // Only use device calendar, do not fallback to Google Calendar
+      if (Platform.OS === 'web' || !ExpoCalendar) {
+        setShowGoogleCalendarOption(true);
+        showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders.');
         return;
       }
       const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
@@ -1786,7 +1736,8 @@ export default function EventsScreen() {
         calendarId = cals?.[0]?.id;
       }
       if (!calendarId) {
-        promptGoogleCalendar();
+        setShowGoogleCalendarOption(true);
+        showAlert('Calendar Not Available', 'No calendar found on your device.');
         return;
       }
       try {
@@ -1807,13 +1758,21 @@ export default function EventsScreen() {
         setReminderModalVisible(false);
         showAlert('Success', 'Reminders added to your calendar.');
       } catch (e) {
-        promptGoogleCalendar();
+        setShowGoogleCalendarOption(true);
+        showAlert('Error', 'Could not add reminders to your device calendar.');
       }
     } catch (e) {
       showAlert('Error', 'Could not add reminders to your device calendar.');
     }
   };
     // --- Reminder Modal State ---
+      // Render Google Calendar option if device calendar is unavailable
+      const renderGoogleCalendarOption = () => {
+        if (!showGoogleCalendarOption) return null;
+        return (
+          <GoogleCalendarButton installed={googleCalendarInstalled} />
+        );
+      };
     const [reminderModalVisible, setReminderModalVisible] = useState(false);
     // Array of { date: string, times: string[] }
     const [reminderSelections, setReminderSelections] = useState<{ date: string, times: string[] }[]>([]);
@@ -5012,6 +4971,7 @@ export default function EventsScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+        {renderGoogleCalendarOption()}
         {/* Date Picker Modal for selecting the day */}
         <Modal visible={showReminderDatePicker} transparent animationType="fade">
           <View style={styles.timePickerOverlay}>
