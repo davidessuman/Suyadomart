@@ -5002,15 +5002,20 @@ export default function EventsScreen() {
                 style={[styles.submitButton, { backgroundColor: colors.primary, marginBottom: 12 }]}
                 onPress={() => {
                   setShowCalendarOptions(false);
-                  if (reminderEvent && reminderSelections.length && reminderSelections[0].times.length) {
-                    const start = buildDateFromStrings(reminderSelections[0].date, reminderSelections[0].times[0]);
-                    const end = new Date(start.getTime() + 60 * 60 * 1000);
-                    const fmt = (d) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-                    const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(reminderEvent.title || '')}&dates=${fmt(start)}/${fmt(end)}&location=${encodeURIComponent(reminderEvent.venue || '')}&details=${encodeURIComponent(reminderEvent.description || '')}`;
-                    window.open(gcUrl, '_blank');
+                  // Platform detection for store links
+                  const ua = navigator.userAgent || navigator.vendor || window.opera;
+                  let storeUrl = 'https://calendar.google.com/';
+                  if (/android/i.test(ua)) {
+                    storeUrl = 'https://play.google.com/store/apps/details?id=com.google.android.calendar';
+                  } else if (/iPad|iPhone|iPod/.test(ua)) {
+                    storeUrl = 'https://apps.apple.com/app/google-calendar/id909319292';
+                  } else if (/Windows NT/i.test(ua)) {
+                    // Microsoft Store does not have Google Calendar, fallback to Google Calendar web
+                    storeUrl = 'https://calendar.google.com/';
                   } else {
-                    window.open('https://calendar.google.com/', '_blank');
+                    storeUrl = 'https://calendar.google.com/';
                   }
+                  window.open(storeUrl, '_blank');
                 }}
               >
                 <Text style={styles.submitButtonText}>Get Google Calendar</Text>
