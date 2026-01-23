@@ -5002,7 +5002,15 @@ export default function EventsScreen() {
                 style={[styles.submitButton, { backgroundColor: colors.primary, marginBottom: 12 }]}
                 onPress={() => {
                   setShowCalendarOptions(false);
-                  window.open('https://calendar.google.com/', '_blank');
+                  if (reminderEvent && reminderSelections.length && reminderSelections[0].times.length) {
+                    const start = buildDateFromStrings(reminderSelections[0].date, reminderSelections[0].times[0]);
+                    const end = new Date(start.getTime() + 60 * 60 * 1000);
+                    const fmt = (d) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                    const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(reminderEvent.title || '')}&dates=${fmt(start)}/${fmt(end)}&location=${encodeURIComponent(reminderEvent.venue || '')}&details=${encodeURIComponent(reminderEvent.description || '')}`;
+                    window.open(gcUrl, '_blank');
+                  } else {
+                    window.open('https://calendar.google.com/', '_blank');
+                  }
                 }}
               >
                 <Text style={styles.submitButtonText}>Get Google Calendar</Text>
@@ -5011,37 +5019,14 @@ export default function EventsScreen() {
                 style={[styles.submitButton, { backgroundColor: colors.primary }]}
                 onPress={() => {
                   setShowCalendarOptions(false);
-                  // Try to open a generic webcal link (ics) to prompt browser to use external app
                   if (reminderEvent && reminderSelections.length && reminderSelections[0].times.length) {
                     const start = buildDateFromStrings(reminderSelections[0].date, reminderSelections[0].times[0]);
                     const end = new Date(start.getTime() + 60 * 60 * 1000);
-                    const formatICSDate = (d) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-                    const uid = uuidv4();
-                    const dtstamp = formatICSDate(new Date());
-                    const dtstart = formatICSDate(start);
-                    const dtend = formatICSDate(end);
-                    const ics = [
-                      'BEGIN:VCALENDAR',
-                      'VERSION:2.0',
-                      'PRODID:-//Suyado Campus//EN',
-                      'METHOD:PUBLISH',
-                      'BEGIN:VEVENT',
-                      `UID:${uid}`,
-                      `DTSTAMP:${dtstamp}`,
-                      `DTSTART:${dtstart}`,
-                      `DTEND:${dtend}`,
-                      `SUMMARY:${reminderEvent.title || ''}`,
-                      reminderEvent.venue ? `LOCATION:${reminderEvent.venue}` : '',
-                      reminderEvent.description ? `DESCRIPTION:${reminderEvent.description}` : '',
-                      'STATUS:TENTATIVE',
-                      'END:VEVENT',
-                      'END:VCALENDAR',
-                    ].filter(Boolean).join('\r\n');
-                    const blob = new Blob([ics], { type: 'text/calendar' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    // Try to open with webcal protocol if possible
-                    window.location.href = blobUrl.replace('blob:', 'webcal:');
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                    const fmt = (d) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                    const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(reminderEvent.title || '')}&dates=${fmt(start)}/${fmt(end)}&location=${encodeURIComponent(reminderEvent.venue || '')}&details=${encodeURIComponent(reminderEvent.description || '')}`;
+                    window.open(gcUrl, '_blank');
+                  } else {
+                    window.open('https://calendar.google.com/', '_blank');
                   }
                 }}
               >
