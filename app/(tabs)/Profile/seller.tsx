@@ -3940,6 +3940,7 @@ function SellerDashboardContent() {
               <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• Ensure you can fulfill orders promptly.</Text>
               <Text style={{ color: themeColors.text, fontSize: 15, marginBottom: 12 }}>• For products with multiple colors, assign each color to the correct product images.</Text>
             </View>
+            <Text style={{ color: "red", fontSize: 15, marginBottom: 12 }}>Poor product details will attract product removal</Text>
             <TouchableOpacity onPress={proceedToAddProduct} style={{ backgroundColor: themeColors.primary, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 32, marginBottom: 8 }}>
               <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>I Understand, Continue</Text>
             </TouchableOpacity>

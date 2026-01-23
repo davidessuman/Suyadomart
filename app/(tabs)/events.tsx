@@ -21,7 +21,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { ExpoCalendar } from '@/lib/expoCalendar';
-import { GoogleCalendarButton } from '../components/GoogleCalendarButton';
+// ...existing code...
 // import { Linking, Platform } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';
@@ -1698,6 +1698,7 @@ export default function EventsScreen() {
     if (showGoogleCalendarOption) checkGoogleCalendarInstalled();
   }, [showGoogleCalendarOption]);
 
+  const [showCalendarOptions, setShowCalendarOptions] = useState(false);
   const handleAddReminderToCalendar = async () => {
     if (!reminderEvent || !reminderSelections.length) return;
     const eventDateTime = buildDateFromStrings(reminderEvent.date, reminderEvent.startTime);
@@ -1711,16 +1712,14 @@ export default function EventsScreen() {
         }
       }
     }
+    const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
+    const description = reminderEvent.description || '';
+    const location = reminderEvent.venue || '';
+    if (Platform.OS === 'web' || !ExpoCalendar) {
+      setShowCalendarOptions(true);
+      return;
+    }
     try {
-      const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
-      const description = reminderEvent.description || '';
-      const location = reminderEvent.venue || '';
-      // Only use device calendar on mobile; fallback to Google Calendar only on web
-      if (Platform.OS === 'web' || !ExpoCalendar) {
-        setShowGoogleCalendarOption(true);
-        showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders.');
-        return;
-      }
       // On mobile, open the native calendar's event creation UI for each reminder
       for (const sel of reminderSelections) {
         for (const time of sel.times) {
@@ -1793,7 +1792,7 @@ export default function EventsScreen() {
           };
         }
         return (
-          <GoogleCalendarButton installed={googleCalendarInstalled} event={eventProps} />
+          {/* GoogleCalendarButton removed */}
         );
       };
     const [reminderModalVisible, setReminderModalVisible] = useState(false);
@@ -4994,7 +4993,69 @@ export default function EventsScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
-        {renderGoogleCalendarOption()}
+        {/* Calendar options modal for web or unavailable calendar */}
+        <Modal visible={showCalendarOptions} transparent animationType="fade" onRequestClose={() => setShowCalendarOptions(false)}>
+          <View style={[styles.timePickerOverlay, { justifyContent: 'center', alignItems: 'center' }]}> 
+            <View style={[styles.timePickerContainer, { backgroundColor: colors.card, minWidth: 300 }]}> 
+              <Text style={[styles.timePickerTitle, { color: colors.text, marginBottom: 16 }]}>Add Reminder to Calendar</Text>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: colors.primary, marginBottom: 12 }]}
+                onPress={() => {
+                  setShowCalendarOptions(false);
+                  window.open('https://calendar.google.com/', '_blank');
+                }}
+              >
+                <Text style={styles.submitButtonText}>Get Google Calendar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  setShowCalendarOptions(false);
+                  // Try to open a generic webcal link (ics) to prompt browser to use external app
+                  if (reminderEvent && reminderSelections.length && reminderSelections[0].times.length) {
+                    const start = buildDateFromStrings(reminderSelections[0].date, reminderSelections[0].times[0]);
+                    const end = new Date(start.getTime() + 60 * 60 * 1000);
+                    const formatICSDate = (d) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                    const uid = uuidv4();
+                    const dtstamp = formatICSDate(new Date());
+                    const dtstart = formatICSDate(start);
+                    const dtend = formatICSDate(end);
+                    const ics = [
+                      'BEGIN:VCALENDAR',
+                      'VERSION:2.0',
+                      'PRODID:-//Suyado Campus//EN',
+                      'METHOD:PUBLISH',
+                      'BEGIN:VEVENT',
+                      `UID:${uid}`,
+                      `DTSTAMP:${dtstamp}`,
+                      `DTSTART:${dtstart}`,
+                      `DTEND:${dtend}`,
+                      `SUMMARY:${reminderEvent.title || ''}`,
+                      reminderEvent.venue ? `LOCATION:${reminderEvent.venue}` : '',
+                      reminderEvent.description ? `DESCRIPTION:${reminderEvent.description}` : '',
+                      'STATUS:TENTATIVE',
+                      'END:VEVENT',
+                      'END:VCALENDAR',
+                    ].filter(Boolean).join('\r\n');
+                    const blob = new Blob([ics], { type: 'text/calendar' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    // Try to open with webcal protocol if possible
+                    window.location.href = blobUrl.replace('blob:', 'webcal:');
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                  }
+                }}
+              >
+                <Text style={styles.submitButtonText}>Open Web Calendar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: colors.textTertiary, marginTop: 12 }]}
+                onPress={() => setShowCalendarOptions(false)}
+              >
+                <Text style={[styles.submitButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
         {/* Date Picker Modal for selecting the day */}
         <Modal visible={showReminderDatePicker} transparent animationType="fade">
           <View style={styles.timePickerOverlay}>
