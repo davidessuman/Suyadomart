@@ -17,40 +17,51 @@ interface GoogleCalendarButtonProps {
 export const GoogleCalendarButton: React.FC<GoogleCalendarButtonProps> = ({ installed, onPress, event }) => {
   const handlePress = () => {
     if (onPress) return onPress();
+    // Helper to format date for Google Calendar
+    const formatDate = (date: Date) => {
+      // Google Calendar expects: YYYYMMDDTHHmmssZ (UTC)
+      return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    };
+    // Build event details for Google Calendar
+    const params = event ? [
+      `text=${encodeURIComponent(event.title)}`,
+      event.description ? `details=${encodeURIComponent(event.description)}` : '',
+      event.location ? `location=${encodeURIComponent(event.location)}` : '',
+      event.start && event.end
+        ? `dates=${formatDate(event.start)}/${formatDate(event.end)}`
+        : '',
+    ].filter(Boolean).join('&') : '';
+    const webUrl = `https://calendar.google.com/calendar/r/eventedit${params ? '?' + params : ''}`;
+
     if (Platform.OS === 'web') {
       // Open Google Calendar event creation page with event details
-      if (!event) {
-        window.open('https://calendar.google.com/calendar/r/eventedit', '_blank');
-        return;
-      }
-      const formatDate = (date: Date) => {
-        // Google Calendar expects: YYYYMMDDTHHmmssZ (UTC)
-        return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-      };
-      const params = [
-        `text=${encodeURIComponent(event.title)}`,
-        event.description ? `details=${encodeURIComponent(event.description)}` : '',
-        event.location ? `location=${encodeURIComponent(event.location)}` : '',
-        event.start && event.end
-          ? `dates=${formatDate(event.start)}/${formatDate(event.end)}`
-          : '',
-      ].filter(Boolean).join('&');
-      const url = `https://calendar.google.com/calendar/r/eventedit?${params}`;
-      window.open(url, '_blank');
+      window.open(webUrl, '_blank');
       return;
     }
     if (Platform.OS === 'android') {
-      if (installed) {
-        // Open Google Calendar app
-        Linking.openURL('intent://com.google.android.calendar/#Intent;scheme=package;end');
-      } else {
+      if (installed && event) {
+        // Open Google Calendar app with event details using intent
+        const intentUrl =
+          `intent://com.google.android.calendar/` +
+          `?action=android.intent.action.INSERT` +
+          `&title=${encodeURIComponent(event.title)}` +
+          (event.description ? `&description=${encodeURIComponent(event.description)}` : '') +
+          (event.location ? `&eventLocation=${encodeURIComponent(event.location)}` : '') +
+          (event.start ? `&beginTime=${event.start.getTime()}` : '') +
+          (event.end ? `&endTime=${event.end.getTime()}` : '') +
+          `#Intent;scheme=content;package=com.google.android.calendar;end`;
+        Linking.openURL(intentUrl);
+      } else if (!installed) {
         // Open Play Store to download Google Calendar
         Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.calendar');
+      } else {
+        // Fallback: open web calendar
+        Linking.openURL(webUrl);
       }
     } else if (Platform.OS === 'ios') {
       if (installed) {
-        // Open Google Calendar app
-        Linking.openURL('googlecalendar://');
+        // No official URL scheme for event creation, fallback to web
+        Linking.openURL(webUrl);
       } else {
         // Open App Store to download Google Calendar
         Linking.openURL('https://apps.apple.com/app/google-calendar/id909319292');
