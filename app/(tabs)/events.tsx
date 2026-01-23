@@ -1721,33 +1721,37 @@ export default function EventsScreen() {
         showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders.');
         return;
       }
-      const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Permission Required', 'Please allow calendar access to add this reminder.');
-        return;
-      }
-      let calendarId;
-      try {
-        const defaultCal = await ExpoCalendar.getDefaultCalendarAsync();
-        calendarId = defaultCal?.id;
-      } catch {}
-      if (!calendarId) {
-        const cals = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
-        calendarId = cals?.[0]?.id;
-      }
-      if (!calendarId) {
-        if (Platform.OS === 'web') {
-          setShowGoogleCalendarOption(true);
-        }
-        showAlert('Calendar Not Available', 'No calendar found on your device.');
-        return;
-      }
-      try {
-        for (const sel of reminderSelections) {
-          for (const time of sel.times) {
-            const startDate = buildDateFromStrings(sel.date, time);
-            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-            await ExpoCalendar.createEventAsync(calendarId, {
+      // On mobile, open the native calendar's event creation UI for each reminder
+      for (const sel of reminderSelections) {
+        for (const time of sel.times) {
+          const startDate = buildDateFromStrings(sel.date, time);
+          const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+          if (Platform.OS === 'android') {
+            try {
+              await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
+                data: 'content://com.android.calendar/events',
+                extra: {
+                  title: summary,
+                  eventLocation: location,
+                  description,
+                  beginTime: startDate.getTime(),
+                  endTime: endDate.getTime(),
+                },
+              });
+            } catch (e) {
+              // Fallback to direct event creation if intent fails
+              await ExpoCalendar.createEventAsync((await ExpoCalendar.getDefaultCalendarAsync())?.id, {
+                title: summary,
+                startDate,
+                endDate,
+                location,
+                notes: description,
+                timeZone: undefined,
+              });
+            }
+          } else if (Platform.OS === 'ios') {
+            // Create the event and open the calendar app to the event date
+            await ExpoCalendar.createEventAsync((await ExpoCalendar.getDefaultCalendarAsync())?.id, {
               title: summary,
               startDate,
               endDate,
@@ -1755,16 +1759,13 @@ export default function EventsScreen() {
               notes: description,
               timeZone: undefined,
             });
+            const secondsSince2001 = startDate.getTime() / 1000 - 978307200;
+            try { await Linking.openURL('calshow:' + secondsSince2001); } catch {}
           }
         }
-        setReminderModalVisible(false);
-        showAlert('Success', 'Reminders added to your calendar.');
-      } catch (e) {
-        if (Platform.OS === 'web') {
-          setShowGoogleCalendarOption(true);
-        }
-        showAlert('Error', 'Could not add reminders to your device calendar.');
       }
+      setReminderModalVisible(false);
+      showAlert('Success', 'Reminders added to your calendar.');
     } catch (e) {
       showAlert('Error', 'Could not add reminders to your device calendar.');
     }
