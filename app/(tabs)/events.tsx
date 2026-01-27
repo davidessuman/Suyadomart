@@ -21,7 +21,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { ExpoCalendar } from '@/lib/expoCalendar';
-// ...existing code...
+import { GoogleCalendarButton } from '../components/GoogleCalendarButton';
 // import { Linking, Platform } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';
@@ -1698,7 +1698,6 @@ export default function EventsScreen() {
     if (showGoogleCalendarOption) checkGoogleCalendarInstalled();
   }, [showGoogleCalendarOption]);
 
-  const [showCalendarOptions, setShowCalendarOptions] = useState(false);
   const handleAddReminderToCalendar = async () => {
     if (!reminderEvent || !reminderSelections.length) return;
     const eventDateTime = buildDateFromStrings(reminderEvent.date, reminderEvent.startTime);
@@ -1712,45 +1711,43 @@ export default function EventsScreen() {
         }
       }
     }
-    const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
-    const description = reminderEvent.description || '';
-    const location = reminderEvent.venue || '';
-    if (Platform.OS === 'web' || !ExpoCalendar) {
-      setShowCalendarOptions(true);
-      return;
-    }
     try {
-      // On mobile, open the native calendar's event creation UI for each reminder
-      for (const sel of reminderSelections) {
-        for (const time of sel.times) {
-          const startDate = buildDateFromStrings(sel.date, time);
-          const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-          if (Platform.OS === 'android') {
-            try {
-              await IntentLauncher.startActivityAsync('android.intent.action.INSERT', {
-                data: 'content://com.android.calendar/events',
-                extra: {
-                  title: summary,
-                  eventLocation: location,
-                  description,
-                  beginTime: startDate.getTime(),
-                  endTime: endDate.getTime(),
-                },
-              });
-            } catch (e) {
-              // Fallback to direct event creation if intent fails
-              await ExpoCalendar.createEventAsync((await ExpoCalendar.getDefaultCalendarAsync())?.id, {
-                title: summary,
-                startDate,
-                endDate,
-                location,
-                notes: description,
-                timeZone: undefined,
-              });
-            }
-          } else if (Platform.OS === 'ios') {
-            // Create the event and open the calendar app to the event date
-            await ExpoCalendar.createEventAsync((await ExpoCalendar.getDefaultCalendarAsync())?.id, {
+      const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
+      const description = reminderEvent.description || '';
+      const location = reminderEvent.venue || '';
+      // Only use device calendar on mobile; fallback to Google Calendar only on web
+      if (Platform.OS === 'web' || !ExpoCalendar) {
+        setShowGoogleCalendarOption(true);
+        showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders.');
+        return;
+      }
+      const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission Required', 'Please allow calendar access to add this reminder.');
+        return;
+      }
+      let calendarId;
+      try {
+        const defaultCal = await ExpoCalendar.getDefaultCalendarAsync();
+        calendarId = defaultCal?.id;
+      } catch {}
+      if (!calendarId) {
+        const cals = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
+        calendarId = cals?.[0]?.id;
+      }
+      if (!calendarId) {
+        if (Platform.OS === 'web') {
+          setShowGoogleCalendarOption(true);
+        }
+        showAlert('Calendar Not Available', 'No calendar found on your device.');
+        return;
+      }
+      try {
+        for (const sel of reminderSelections) {
+          for (const time of sel.times) {
+            const startDate = buildDateFromStrings(sel.date, time);
+            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            await ExpoCalendar.createEventAsync(calendarId, {
               title: summary,
               startDate,
               endDate,
@@ -1758,13 +1755,16 @@ export default function EventsScreen() {
               notes: description,
               timeZone: undefined,
             });
-            const secondsSince2001 = startDate.getTime() / 1000 - 978307200;
-            try { await Linking.openURL('calshow:' + secondsSince2001); } catch {}
           }
         }
+        setReminderModalVisible(false);
+        showAlert('Success', 'Reminders added to your calendar.');
+      } catch (e) {
+        if (Platform.OS === 'web') {
+          setShowGoogleCalendarOption(true);
+        }
+        showAlert('Error', 'Could not add reminders to your device calendar.');
       }
-      setReminderModalVisible(false);
-      showAlert('Success', 'Reminders added to your calendar.');
     } catch (e) {
       showAlert('Error', 'Could not add reminders to your device calendar.');
     }
@@ -1792,7 +1792,7 @@ export default function EventsScreen() {
           };
         }
         return (
-          {/* GoogleCalendarButton removed */}
+          <GoogleCalendarButton installed={googleCalendarInstalled} event={eventProps} />
         );
       };
     const [reminderModalVisible, setReminderModalVisible] = useState(false);
@@ -4993,59 +4993,7 @@ export default function EventsScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
-        {/* Calendar options modal for web or unavailable calendar */}
-        <Modal visible={showCalendarOptions} transparent animationType="fade" onRequestClose={() => setShowCalendarOptions(false)}>
-          <View style={[styles.timePickerOverlay, { justifyContent: 'center', alignItems: 'center' }]}> 
-            <View style={[styles.timePickerContainer, { backgroundColor: colors.card, minWidth: 300 }]}> 
-              <Text style={[styles.timePickerTitle, { color: colors.text, marginBottom: 16 }]}>Add Reminder to Calendar</Text>
-              <TouchableOpacity
-                style={[styles.submitButton, { backgroundColor: colors.primary, marginBottom: 12 }]}
-                onPress={() => {
-                  setShowCalendarOptions(false);
-                  // Platform detection for store links
-                  const ua = navigator.userAgent || navigator.vendor || window.opera;
-                  let storeUrl = 'https://calendar.google.com/';
-                  if (/android/i.test(ua)) {
-                    storeUrl = 'https://play.google.com/store/apps/details?id=com.google.android.calendar';
-                  } else if (/iPad|iPhone|iPod/.test(ua)) {
-                    storeUrl = 'https://apps.apple.com/app/google-calendar/id909319292';
-                  } else if (/Windows NT/i.test(ua)) {
-                    // Microsoft Store does not have Google Calendar, fallback to Google Calendar web
-                    storeUrl = 'https://calendar.google.com/';
-                  } else {
-                    storeUrl = 'https://calendar.google.com/';
-                  }
-                  window.open(storeUrl, '_blank');
-                }}
-              >
-                <Text style={styles.submitButtonText}>Get Google Calendar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitButton, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  setShowCalendarOptions(false);
-                  if (reminderEvent && reminderSelections.length && reminderSelections[0].times.length) {
-                    const start = buildDateFromStrings(reminderSelections[0].date, reminderSelections[0].times[0]);
-                    const end = new Date(start.getTime() + 60 * 60 * 1000);
-                    const fmt = (d) => new Date(d).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-                    const gcUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(reminderEvent.title || '')}&dates=${fmt(start)}/${fmt(end)}&location=${encodeURIComponent(reminderEvent.venue || '')}&details=${encodeURIComponent(reminderEvent.description || '')}`;
-                    window.open(gcUrl, '_blank');
-                  } else {
-                    window.open('https://calendar.google.com/', '_blank');
-                  }
-                }}
-              >
-                <Text style={styles.submitButtonText}>Open Web Calendar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitButton, { backgroundColor: colors.textTertiary, marginTop: 12 }]}
-                onPress={() => setShowCalendarOptions(false)}
-              >
-                <Text style={[styles.submitButtonText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        {renderGoogleCalendarOption()}
         {/* Date Picker Modal for selecting the day */}
         <Modal visible={showReminderDatePicker} transparent animationType="fade">
           <View style={styles.timePickerOverlay}>

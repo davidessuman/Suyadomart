@@ -4637,8 +4637,10 @@ export default function SearchScreen() {
     try {
       const userId = await getCurrentUserId();
       if (!userId) {
-        requireAuth('place an order');
-        throw new Error('Please log in to place order');
+        showAlert('Authentication Required', 'You must be logged in to place an order. Please log in and try again.');
+        setOrderFormVisible(false);
+        setIsCartOrder(false);
+        throw new Error('User is not authenticated. Order placement blocked.');
       }
 
       // For single product order

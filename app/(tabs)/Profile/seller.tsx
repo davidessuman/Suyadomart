@@ -1102,6 +1102,7 @@ function SellerDashboardContent() {
       setOrdersLoading(true);
       console.log('📦 Loading orders for seller:', session.user.id);
       
+      // FIXED: Remove the problematic buyer join and get buyer info directly from orders
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -1109,8 +1110,7 @@ function SellerDashboardContent() {
           order_items(
             *,
             products(*)
-          ),
-          buyer:user_profiles!orders_user_id_fkey(avatar_url)
+          )
         `)
         .eq('seller_id', session.user.id)
         .order('created_at', { ascending: false });
@@ -1121,11 +1121,33 @@ function SellerDashboardContent() {
       }
       
       console.log('✅ Orders loaded:', data?.length);
-      if (data && data.length > 0) {
-        console.log('🔍 First order buyer_name:', data[0].buyer_name);
-      }
       
-      setOrders(data || []);
+      // Get buyer avatars separately if needed
+      if (data && data.length > 0) {
+        const userIds = [...new Set(data.map(order => order.user_id))];
+        const { data: buyerProfiles } = await supabase
+          .from('user_profiles')
+          .select('id, avatar_url')
+          .in('id', userIds);
+        
+        // Map profiles to orders
+        const profileMap = {};
+        buyerProfiles?.forEach(profile => {
+          profileMap[profile.id] = profile.avatar_url;
+        });
+        
+        const ordersWithAvatars = data.map(order => ({
+          ...order,
+          buyer: { 
+            avatar_url: profileMap[order.user_id] || 
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(order.buyer_name || 'Buyer')}&background=FF9900&color=fff`
+          }
+        }));
+        
+        setOrders(ordersWithAvatars);
+      } else {
+        setOrders(data || []);
+      }
       
       const pendingCount = (data || []).filter(order =>
         order.status === 'pending'
