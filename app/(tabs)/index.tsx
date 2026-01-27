@@ -7770,7 +7770,7 @@ export default function BuyerScreen() {
           (orderData.selectedSize ? `Size: ${orderData.selectedSize} • ` : '') +
           (orderData.selectedColor ? `Color: ${orderData.selectedColor} • ` : '') +
           `Total: GHS ${totalAmount.toFixed(2)}\n\n` +
-          `The seller will contact you shortly`,
+          `The seller will contact you shortly.\n\nContact seller via the order details in your orders page when seller delays to reach out.`,
           [
             { 
               text: 'OK', 

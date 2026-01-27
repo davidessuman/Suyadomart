@@ -4773,7 +4773,11 @@ export default function SearchScreen() {
         // Show success alert
         showAlert(
           'Order Successful!',
-          `Your order #${order.id.slice(-8)} has been placed successfully. The seller will contact you shortly.`,
+          `Your order #${order.id.slice(-8)} has been placed successfully. Quantity: ${orderData.quantity || 1} • ` +
+          (orderData.selectedSize ? `Size: ${orderData.selectedSize} • ` : '') +
+          (orderData.selectedColor ? `Color: ${orderData.selectedColor} • ` : '') +
+          `Total: GHS ${(orderForProduct.price * (orderData.quantity || 1)).toFixed(2)}\n\n` +
+          `The seller will contact you shortly.\n\nContact seller via the order details in your orders page when seller delays to reach out.`,
           [
             { 
               text: 'OK', 
