@@ -7502,124 +7502,109 @@ export default function BuyerScreen() {
         if (cartItems.length === 0) {
           throw new Error('Cart is empty');
         }
-        
-        const cartTotal = getCartTotal();
-        
-        const uniqueSellerIds = new Set(cartItems.map(item => item.product.seller_id));
-        if (uniqueSellerIds.size > 1) {
-          throw new Error('All items in cart must be from the same seller');
-        }
-        
-        const sellerId = cartItems[0]?.product?.seller_id;
-        if (!sellerId) {
-          throw new Error('Unable to determine seller');
-        }
-        
-        // For cart orders, we don't set size/color at order level, only at item level
-        const { data: masterOrder, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            user_id: userId,
-            seller_id: sellerId,
-            buyer_name: orderData.fullName,
-            phone_number: phoneNumber,
-            location: orderData.location,
-            delivery_option: orderData.deliveryOption,
-            additional_notes: orderData.additionalNotes || '',
-            total_amount: cartTotal,
-            status: 'pending',
-            is_cart_order: true,
-            // Cart orders don't have single product size/color
-            selected_color: null,
-            selected_size: null,
-            quantity: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-          
-        if (orderError) {
-          console.error('Order creation error:', orderError);
-          throw new Error(`Failed to create order: ${orderError.message}`);
-        }
-        
-        // Prepare order items with size and color from cart items
-        const orderItems = (cartItems as any).map((item: any) => ({
-          order_id: masterOrder.id,
-          product_id: item.product.id,
-          product_name: item.product.title,
-          product_price: item.product.price,
-          product_image_url: getCardDisplayUrl(item.product.media_urls) || null,
-          quantity: item.quantity,
-          total_price: item.product.price * item.quantity,
-          seller_id: item.product.seller_id,
-          size: item.selectedSize || item.product.selectedSize || null, // Get size from cart item
-          color: item.selectedColor || item.product.selectedColor || null, // Get color from cart item
-          created_at: new Date().toISOString(),
-        }));
-        
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(orderItems);
-          
-        if (itemsError) {
-          console.error('Order items error:', itemsError);
-          await supabase.from('orders').delete().eq('id', masterOrder.id);
-          throw new Error('Failed to create order items. Please try again.');
-        }
-        
-        // Prepare notification data with item details
-        const notificationData = {
-          order_id: masterOrder.id,
-          seller_id: sellerId,
-          product_name: cartItems.length > 1 ? `${cartItems.length} items` : cartItems[0].product.title,
-          product_price: cartTotal,
-          product_image: getCardDisplayUrl(cartItems[0]?.product.media_urls) || null,
-          quantity: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-          buyer_name: orderData.fullName,
-          buyer_phone: phoneNumber,
-          total_amount: cartTotal,
-          delivery_option: orderData.deliveryOption,
-          location: orderData.location,
-          items: cartItems.map(item => ({
-            name: item.product.title,
+
+        // Group cart items by seller
+        const sellerGroups = cartItems.reduce((groups, item) => {
+          const sellerId = item.product.seller_id;
+          if (!groups[sellerId]) {
+            groups[sellerId] = [];
+          }
+          groups[sellerId].push(item);
+          return groups;
+        }, {} as Record<string, typeof cartItems>);
+
+        for (const [sellerId, items] of Object.entries(sellerGroups)) {
+          const sellerTotal = items.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+
+          // Create the main order for this seller
+          const { data: order, error: orderError } = await supabase
+            .from('orders')
+            .insert({
+              user_id: userId,
+              seller_id: sellerId,
+              buyer_name: orderData.fullName,
+              phone_number: phoneNumber,
+              location: orderData.location,
+              delivery_option: orderData.deliveryOption,
+              additional_notes: orderData.additionalNotes || '',
+              total_amount: sellerTotal,
+              status: 'pending',
+              is_cart_order: true,
+              selected_color: null,
+              selected_size: null,
+              quantity: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (orderError) {
+            console.error('Cart order error:', orderError);
+            throw new Error(`Failed to create order: ${orderError.message}`);
+          }
+
+          // Create order items for this seller
+          const orderItems = items.map(item => ({
+            order_id: order.id,
+            product_id: item.product.id,
+            product_name: item.product.title,
+            product_price: item.product.price,
+            product_image_url: getCardDisplayUrl(item.product.media_urls) || null,
             quantity: item.quantity,
-            size: item.product.selectedSize,
-            color: item.product.selectedColor,
-            price: item.product.price,
-            total: item.product.price * item.quantity,
-          })),
-        };
-        
-        try {
-          await sendOrderNotificationToSeller(notificationData);
-        } catch (notifError) {
-          console.warn('Notification error:', notifError);
-        }
-        
-        try {
+            total_price: item.product.price * item.quantity,
+            seller_id: sellerId,
+            size: item.selectedSize || item.product.selectedSize || null,
+            color: item.selectedColor || item.product.selectedColor || null,
+            created_at: new Date().toISOString(),
+          }));
+
+          const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(orderItems);
+
+          if (itemsError) {
+            console.warn('Order items error:', itemsError);
+          }
+
+          // Send notification to seller
+          await sendOrderNotificationToSeller({
+            order_id: order.id,
+            seller_id: sellerId,
+            product_name: items.length > 1 ? `${items.length} items` : items[0].product.title,
+            product_price: sellerTotal,
+            product_image: getCardDisplayUrl(items[0]?.product.media_urls) || null,
+            quantity: items.reduce((total, item) => total + item.quantity, 0),
+            buyer_name: orderData.fullName,
+            buyer_phone: phoneNumber,
+            total_amount: sellerTotal,
+            delivery_option: orderData.deliveryOption,
+            location: orderData.location,
+            items: items.map(item => ({
+              name: item.product.title,
+              quantity: item.quantity,
+              size: item.product.selectedSize,
+              color: item.product.selectedColor,
+              price: item.product.price,
+              total: item.product.price * item.quantity,
+            })),
+          });
+
+          // Send notification to buyer for each order
           await sendOrderNotificationToBuyer({
             user_id: userId,
-            order_id: masterOrder.id,
-            total_amount: cartTotal,
-            items_count: cartItems.length,
+            order_id: order.id,
+            total_amount: sellerTotal,
+            items_count: items.length,
           });
-          
-          const newCount = await fetchUnreadNotificationCount();
-          setUnreadNotificationCount(newCount);
-        } catch (notifError) {
-          console.warn('Buyer notification error:', notifError);
         }
-        
+
         await clearCart();
-        
         setOrderFormVisible(false);
         setCartVisible(false);
-        
         showAlert(
           'Order Successful!',
-          `Your order #${masterOrder.id.slice(-8)} has been placed successfully. The seller will contact you shortly.`,
+          'Your cart order has been placed successfully. The sellers will contact you shortly.',
           [
             { 
               text: 'OK', 
@@ -7631,7 +7616,6 @@ export default function BuyerScreen() {
             }
           ]
         );
-        
       } else if (orderForProduct) {
         // For single product order, calculate total with quantity
         const quantity = orderData.quantity || 1;

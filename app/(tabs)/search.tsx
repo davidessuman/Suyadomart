@@ -1,3 +1,49 @@
+// === Helper function to send order notification to buyer ===
+const sendOrderNotificationToBuyer = async (orderData: any) => {
+  try {
+    // Prevent duplicate notifications for the same order/user
+    try {
+      const { data: existing, error: fetchErr } = await supabase
+        .from('buyer_notifications')
+        .select('id')
+        .eq('order_id', orderData.order_id)
+        .eq('user_id', orderData.user_id)
+        .eq('type', 'order_placed')
+        .limit(1)
+        .single();
+      if (!fetchErr && existing) {
+        // A notification for this order and user already exists — skip inserting duplicate
+        return;
+      }
+    } catch (e) {
+      // ignore lookup errors and continue to insert to avoid blocking order flow
+      console.warn('Error checking existing buyer notification:', e);
+    }
+
+    const { error } = await supabase
+      .from('buyer_notifications')
+      .insert({
+        user_id: orderData.user_id,
+        order_id: orderData.order_id,
+        type: 'order_placed',
+        title: 'Order Placed Successfully',
+        message: `Your order #${orderData.order_id.slice(-8)} has been placed successfully.`,
+        data: {
+          order_id: orderData.order_id,
+          total_amount: orderData.total_amount,
+          status: 'pending',
+          timestamp: new Date().toISOString(),
+        },
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+    if (error) {
+      console.warn('Buyer notification insert error:', error);
+    }
+  } catch (error) {
+    console.warn('Error sending notification to buyer:', error);
+  }
+};
 // app/(tabs)/SearchScreen.tsx
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -4695,6 +4741,7 @@ export default function SearchScreen() {
         }
 
         // Send notification
+
         await sendOrderNotificationToSeller({
           order_id: order.id,
           seller_id: orderForProduct.seller_id,
@@ -4709,6 +4756,14 @@ export default function SearchScreen() {
           location: orderData.location,
           selected_color: orderData.selectedColor,
           selected_size: orderData.selectedSize,
+        });
+
+        // Send notification to buyer
+        await sendOrderNotificationToBuyer({
+          user_id: userId,
+          order_id: order.id,
+          total_amount: orderForProduct.price * (orderData.quantity || 1),
+          items_count: 1,
         });
 
         // Close the order form modal first
@@ -4807,6 +4862,14 @@ export default function SearchScreen() {
             total_amount: sellerTotal,
             delivery_option: formatDeliveryOption(orderData.deliveryOption),
             location: orderData.location,
+          });
+
+          // Send notification to buyer for each order
+          await sendOrderNotificationToBuyer({
+            user_id: userId,
+            order_id: order.id,
+            total_amount: sellerTotal,
+            items_count: items.length,
           });
         }
 
