@@ -1,5 +1,50 @@
 import { Platform } from 'react-native';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+// ...existing code...
+// Helper to check if a date is more than 24 hours in the past
+const isExpired = (dateStr) => {
+  if (!dateStr) return false;
+  const eventDate = new Date(dateStr);
+  eventDate.setHours(23, 59, 59, 999); // End of event day
+  const now = new Date();
+  return now.getTime() > eventDate.getTime() + 24 * 60 * 60 * 1000;
+};
+// Delete expired events and announcements
+const deleteExpiredItems = async () => {
+  try {
+    // Delete expired events
+    const { data: eventsData, error: eventsError } = await supabase
+      .from('events')
+      .select('id, date');
+    if (!eventsError && Array.isArray(eventsData)) {
+      const expiredEventIds = eventsData.filter(e => isExpired(e.date)).map(e => e.id);
+      if (expiredEventIds.length > 0) {
+        await supabase.from('events').delete().in('id', expiredEventIds);
+      }
+    }
+    // Delete expired announcements
+    const { data: annData, error: annError } = await supabase
+      .from('announcements')
+      .select('id, announcement_dates');
+    if (!annError && Array.isArray(annData)) {
+      const expiredAnnIds = annData.filter(a => {
+        if (!a.announcement_dates) return false;
+        try {
+          const dates = JSON.parse(a.announcement_dates);
+          if (!Array.isArray(dates) || dates.length === 0) return false;
+          return isExpired(dates[dates.length - 1]);
+        } catch {
+          return false;
+        }
+      }).map(a => a.id);
+      if (expiredAnnIds.length > 0) {
+        await supabase.from('announcements').delete().in('id', expiredAnnIds);
+      }
+    }
+  } catch (err) {
+    // Optionally log error
+  }
+};
 import {
   View,
   Text,
@@ -18,9 +63,6 @@ import {
   Animated,
   RefreshControl,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as IntentLauncher from 'expo-intent-launcher';
-import { ExpoCalendar } from '@/lib/expoCalendar';
 import { GoogleCalendarButton } from '../components/GoogleCalendarButton';
 // import { Linking, Platform } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
@@ -1634,6 +1676,10 @@ export default function EventsScreen() {
   const [showUserEvents, setShowUserEvents] = useState(false);
   const [showUserAnnouncements, setShowUserAnnouncements] = useState(false);
   const [showEventDetails, setShowEventDetails] = useState(false);
+  // State for fullscreen event description modal
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
+  // State for fullscreen general description modal
+  const [showGeneralDescriptionModal, setShowGeneralDescriptionModal] = useState(false);
   const [showAnnouncementDetails, setShowAnnouncementDetails] = useState(false);
   const [viewingAnnouncementFromMyList, setViewingAnnouncementFromMyList] = useState(false);
   const [showFullScreenImage, setShowFullScreenImage] = useState(false);
@@ -1715,58 +1761,41 @@ export default function EventsScreen() {
       const summary = (reminderEvent.title || '').replace(/\r?\n/g, ' ');
       const description = reminderEvent.description || '';
       const location = reminderEvent.venue || '';
-      // Only use device calendar on mobile; fallback to Google Calendar only on web
-      if (Platform.OS === 'web' || !ExpoCalendar) {
-        setShowGoogleCalendarOption(true);
-        showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders.');
-        return;
-      }
-      const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
-      if (status !== 'granted') {
-        showAlert('Permission Required', 'Please allow calendar access to add this reminder.');
-        return;
-      }
-      let calendarId;
-      try {
-        const defaultCal = await ExpoCalendar.getDefaultCalendarAsync();
-        calendarId = defaultCal?.id;
-      } catch {}
-      if (!calendarId) {
-        const cals = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
-        calendarId = cals?.[0]?.id;
-      }
-      if (!calendarId) {
-        if (Platform.OS === 'web') {
-          setShowGoogleCalendarOption(true);
-        }
-        showAlert('Calendar Not Available', 'No calendar found on your device.');
-        return;
-      }
-      try {
-        for (const sel of reminderSelections) {
-          for (const time of sel.times) {
-            const startDate = buildDateFromStrings(sel.date, time);
-            const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-            await ExpoCalendar.createEventAsync(calendarId, {
-              title: summary,
-              startDate,
-              endDate,
-              location,
-              notes: description,
-              timeZone: undefined,
-            });
+      let deviceCalendarSuccess = false;
+      if (Platform.OS !== 'web' && ExpoCalendar) {
+        try {
+          for (const sel of reminderSelections) {
+            for (const time of sel.times) {
+              const startDate = buildDateFromStrings(sel.date, time);
+              const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+              await ExpoCalendar.createEventAsync(
+                (await ExpoCalendar.getDefaultCalendarAsync())?.id,
+                {
+                  title: summary,
+                  startDate,
+                  endDate,
+                  location,
+                  notes: description,
+                  timeZone: undefined,
+                }
+              );
+            }
           }
+          setReminderModalVisible(false);
+          showAlert('Success', 'Reminders added to your calendar.');
+          deviceCalendarSuccess = true;
+        } catch (e) {
+          // Device calendar failed, fallback to Google Calendar
+          deviceCalendarSuccess = false;
         }
-        setReminderModalVisible(false);
-        showAlert('Success', 'Reminders added to your calendar.');
-      } catch (e) {
-        if (Platform.OS === 'web') {
-          setShowGoogleCalendarOption(true);
-        }
-        showAlert('Error', 'Could not add reminders to your device calendar.');
+      }
+      if (!deviceCalendarSuccess) {
+        setShowGoogleCalendarOption(true);
+        showAlert('Calendar Not Available', 'Your device calendar is not available or does not support reminders. You can add to Google Calendar instead.');
       }
     } catch (e) {
-      showAlert('Error', 'Could not add reminders to your device calendar.');
+      setShowGoogleCalendarOption(true);
+      showAlert('Error', 'Could not add reminders to your device calendar. You can add to Google Calendar instead.');
     }
   };
     // --- Reminder Modal State ---
@@ -1791,8 +1820,9 @@ export default function EventsScreen() {
             end,
           };
         }
+        // Show GoogleCalendarButton for web integration
         return (
-          <GoogleCalendarButton installed={googleCalendarInstalled} event={eventProps} />
+          <GoogleCalendarButton event={eventProps} />
         );
       };
     const [reminderModalVisible, setReminderModalVisible] = useState(false);
@@ -2065,9 +2095,13 @@ export default function EventsScreen() {
     }
   };
 
-  // Fetch user's university on component mount
+
+  // On mount: delete expired items, then fetch university
   useEffect(() => {
-    fetchUserUniversity();
+    (async () => {
+      await deleteExpiredItems();
+      fetchUserUniversity();
+    })();
   }, []);
 
   // Animated loading screen effects
@@ -4193,19 +4227,14 @@ export default function EventsScreen() {
               style={styles.adBgImage} 
               blurRadius={8}
             />
-            <View style={[styles.adBgOverlay, {
-              ...(Platform.OS === 'web'
-                ? ({ backgroundImage: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.7) 100%)' } as any)
-                : {}),
-              backgroundColor: 'rgba(0,0,0,0.6)',
-            }]} />
+            {/* Removed dark overlay on banner */}
             <View style={styles.adContent}>
               <View style={styles.adTextSide}>
                 <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
                   <View style={styles.liveTag}><Text style={styles.liveTagText}>📅 EVENT</Text></View>
                   <View style={styles.liveTag}><Text style={styles.liveTagText}>{getEventStatus(todayEvents[bannerIndex])}</Text></View>
                 </View>
-                <Text style={styles.adTitle} numberOfLines={2}>{todayEvents[bannerIndex]?.title || ''}</Text>
+                <Text style={[styles.adTitle, { color: '#FF9800' }]} numberOfLines={2}>{todayEvents[bannerIndex]?.title || ''}</Text>
                 <Text style={styles.adLocation} numberOfLines={1}>
                   {todayEvents[bannerIndex]?.appearance === 'Virtual Meeting' 
                     ? todayEvents[bannerIndex]?.platform 
@@ -4252,21 +4281,10 @@ export default function EventsScreen() {
                   {event?.flyer && event.flyer.startsWith('https://') ? (
                     <>
                       <Image source={{ uri: event.flyer }} style={styles.adBgImage} blurRadius={14} />
-                      <View style={[styles.adBgOverlay, { 
-                        ...(Platform.OS === 'web'
-                          ? ({ backgroundImage: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)` } as any)
-                          : {}),
-                        backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
-                      }]} />
+                      {/* Removed dark overlay on banner */}
                     </>
                   ) : (
                     <>
-                      <View style={[styles.adBgOverlay, { 
-                        ...(Platform.OS === 'web'
-                          ? ({ backgroundImage: `linear-gradient(135deg, ${getCategoryBackground(event?.category || 'General').gradient[0]} 0%, ${getCategoryBackground(event?.category || 'General').gradient[1]} 100%)` } as any)
-                          : {}),
-                        backgroundColor: getCategoryBackground(event?.category || 'General').gradient[0],
-                      }]} />
                       <View style={styles.adPatternOverlay}>
                         <Text style={styles.adPatternText}>{getCategoryBackground(event?.category || 'General').pattern}</Text>
                         <Text style={styles.adPatternText}>{getCategoryBackground(event?.category || 'General').pattern}</Text>
@@ -4280,7 +4298,7 @@ export default function EventsScreen() {
                         <View style={styles.liveTag}><Text style={styles.liveTagText}>📅 EVENT</Text></View>
                         <View style={styles.liveTag}><Text style={styles.liveTagText}>{getEventStatus(event)}</Text></View>
                       </View>
-                      <Text style={styles.adTitle} numberOfLines={2}>{event?.title || ''}</Text>
+                      <Text style={[styles.adTitle, { color: '#FF9800' }]} numberOfLines={2}>{event?.title || ''}</Text>
                       <Text style={styles.adLocation} numberOfLines={1}>
                         {event?.appearance === 'Virtual Meeting' 
                           ? event?.platform 
@@ -5456,14 +5474,43 @@ export default function EventsScreen() {
                       )}
 
                       <Text style={[styles.inputLabel, { color: colors.text }]}>Event Description (Single Day)</Text>
-                      <TextInput 
-                        style={[styles.input, styles.textArea, { height: 100, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]} 
-                        multiline 
-                        value={formData.description} 
-                        onChangeText={txt => setFormData({ ...formData, description: txt })} 
-                        placeholder="Describe what will happen at this event..."
-                        placeholderTextColor={colors.textSecondary}
-                      />
+                      <TouchableOpacity onPress={() => setShowDescriptionModal(true)}>
+                        <View pointerEvents="none">
+                          <TextInput
+                            style={[styles.input, styles.textArea, { height: 100, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                            multiline
+                            value={formData.description}
+                            editable={false}
+                            placeholder="Describe what will happen at this event..."
+                            placeholderTextColor={colors.textSecondary}
+                          />
+                        </View>
+                      </TouchableOpacity>
+
+                      <Modal visible={showDescriptionModal} animationType="slide" transparent>
+                        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+                          <View style={[styles.modalContent, { backgroundColor: colors.card, minHeight: '60%' }]}>  
+                            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>  
+                              <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Event Description</Text>
+                              <TouchableOpacity onPress={() => setShowDescriptionModal(false)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>  
+                                <Text style={styles.closeBtnText}>✕</Text>
+                              </TouchableOpacity>
+                            </View>
+                            <TextInput
+                              style={[styles.input, styles.textArea, { minHeight: 200, maxHeight: 400, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text, fontSize: 18 }]}
+                              multiline
+                              autoFocus
+                              value={formData.description}
+                              onChangeText={txt => setFormData({ ...formData, description: txt })}
+                              placeholder="Describe what will happen at this event..."
+                              placeholderTextColor={colors.textSecondary}
+                            />
+                            <TouchableOpacity style={[styles.submitButton, { marginTop: 24 }]} onPress={() => setShowDescriptionModal(false)}>
+                              <Text style={styles.submitButtonText}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </KeyboardAvoidingView>
+                      </Modal>
                     </>
                   ) : (
                     // MULTI-DAY: Show summary of each day with edit option
@@ -5739,14 +5786,43 @@ export default function EventsScreen() {
                   ) : (
                     <Text style={[styles.inputLabel, { color: colors.text }]}>General Event Description (Overview)</Text>
                   )}
-                  <TextInput 
-                    style={[styles.input, styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]} 
-                    multiline 
-                    value={formData.description} 
-                    onChangeText={txt => setFormData({ ...formData, description: txt })} 
-                    placeholder={selectedDates.length === 1 ? "Event details..." : "Overview of the multi-day event..."}
-                    placeholderTextColor={colors.textSecondary}
-                  />
+                  <TouchableOpacity onPress={() => setShowGeneralDescriptionModal(true)}>
+                    <View pointerEvents="none">
+                      <TextInput
+                        style={[styles.input, styles.textArea, { height: 100, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                        multiline
+                        value={formData.description}
+                        editable={false}
+                        placeholder={selectedDates.length === 1 ? "Event details..." : "Overview of the multi-day event..."}
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                    </View>
+                  </TouchableOpacity>
+
+                  <Modal visible={showGeneralDescriptionModal} animationType="slide" transparent>
+                    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+                      <View style={[styles.modalContent, { backgroundColor: colors.card, minHeight: '60%' }]}>  
+                        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>  
+                          <Text style={[styles.modalTitle, { color: colors.text }]}>Edit General Description</Text>
+                          <TouchableOpacity onPress={() => setShowGeneralDescriptionModal(false)} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>  
+                            <Text style={styles.closeBtnText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput
+                          style={[styles.input, styles.textArea, { minHeight: 200, maxHeight: 400, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text, fontSize: 18 }]}
+                          multiline
+                          autoFocus
+                          value={formData.description}
+                          onChangeText={txt => setFormData({ ...formData, description: txt })}
+                          placeholder={selectedDates.length === 1 ? "Event details..." : "Overview of the multi-day event..."}
+                          placeholderTextColor={colors.textSecondary}
+                        />
+                        <TouchableOpacity style={[styles.submitButton, { marginTop: 24 }]} onPress={() => setShowGeneralDescriptionModal(false)}>
+                          <Text style={styles.submitButtonText}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </KeyboardAvoidingView>
+                  </Modal>
 
                   <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.primary }]} onPress={handleAddEvent}>
                     <Text style={styles.submitButtonText}>
