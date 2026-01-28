@@ -1,4 +1,49 @@
 import React, { useEffect, useState } from 'react';
+// Web Push Notification logic (web only)
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+  // Import supabase client from the same instance as the app
+  const { supabase } = require('@/lib/supabase');
+  window.registerPushServiceWorker = async function () {
+    console.log('[Push] Starting registration...');
+    try {
+      // Register the service worker
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      console.log('[Push] Service worker registered:', reg);
+      // Request notification permission
+      const permission = await Notification.requestPermission();
+      console.log('[Push] Notification permission:', permission);
+      if (permission !== 'granted') {
+        alert('Notification permission denied.');
+        return null;
+      }
+      // Subscribe to push
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: 'BJBZSDczPaVSiRj49xRx35WXIueIqgYInu7mzMP0XBlAog-zfUXvDyYony_yBUwG4RKURnYTcqXWKNtFgR5KTnc'
+      });
+      console.log('[Push] Subscription:', subscription);
+      // Get user from supabase client
+      const { data: { user } } = await supabase.auth.getUser();
+      const user_id = user ? user.id : null;
+      console.log('[Push] user_id:', user_id);
+      const resp = await fetch('http://localhost:4000/api/save-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id,
+          endpoint: subscription.endpoint,
+          keys: subscription.toJSON().keys
+        })
+      });
+      const respData = await resp.json();
+      console.log('[Push] Subscription save response:', resp.status, respData);
+      return subscription;
+    } catch (err) {
+      console.error('[Push] Registration failed:', err);
+      return null;
+    }
+  };
+}
 import {
   DarkTheme,
   DefaultTheme,
@@ -51,12 +96,18 @@ export default function RootLayout() {
       } finally {
         // 3. Splash delay
         setTimeout(() => {
-          setIsReady(true); 
+          setIsReady(true);
         }, 1500);
       }
     };
 
     initializeApp();
+
+    // Ensure push registration is called and visible in console, only after session is set
+    if (typeof window !== 'undefined' && window.registerPushServiceWorker && session) {
+      console.log('[Push] Calling window.registerPushServiceWorker() from useEffect');
+      window.registerPushServiceWorker();
+    }
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
