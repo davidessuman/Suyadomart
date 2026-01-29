@@ -10,8 +10,19 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManage
       const reg = await navigator.serviceWorker.register('/sw.js');
       console.log('[Push] Service worker registered:', reg);
       // Request notification permission
-      const permission = await Notification.requestPermission();
-      console.log('[Push] Notification permission:', permission);
+      console.log('[Push] About to call Notification.requestPermission()');
+      let permission;
+      try {
+        permission = await Notification.requestPermission();
+        console.log('[Push] Notification permission:', permission);
+      } catch (err) {
+        console.error('[Push] Notification.requestPermission() error:', err);
+        return null;
+      }
+      if (permission !== 'granted') {
+        alert('Notification permission denied.');
+        return null;
+      }
       if (permission !== 'granted') {
         alert('Notification permission denied.');
         return null;
@@ -27,10 +38,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManage
       const user_id = user ? user.id : null;
       console.log('[Push] user_id:', user_id);
       // Use Vercel endpoint in production, localhost in dev
-      const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
-      const backendUrl = isProd
-        ? 'https://www.suyadomart.com/api/save-subscription'
-        : 'http://localhost:4000/api/save-subscription';
+      // Always use the deployed Vercel endpoint for both production and development
+      const backendUrl = 'https://www.suyadomart.com/api/save-subscription';
       const resp = await fetch(backendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,7 +63,7 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from '@react-navigation/native';
-import { useColorScheme, View, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { useColorScheme, View, Image, StyleSheet, ActivityIndicator, TouchableOpacity, Text, Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '@/lib/supabase';
@@ -73,10 +82,15 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.setIsPushSubscribed = setIsSubscribed;
+    }
+  }, []);
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();
-
   const [session, setSession] = useState<any>(null);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
   const [selectedCampus, setSelectedCampus] = useState<string | null>(null);

@@ -17,6 +17,7 @@ import {
   useColorScheme,
   StatusBar,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons, Feather, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -882,6 +883,30 @@ export default function ProfileScreen() {
                     <Text style={[styles.buyerText, { color: colors.primary }]}>BUYER</Text>
                   </View>
                 </View>
+                {/* Enable Push Notifications button below Status for authenticated buyers only */}
+                {session && typeof window !== 'undefined' && window.registerPushServiceWorker && !window.__pushSubscribed && (
+                  <TouchableOpacity
+                    style={{
+                      marginTop: 12,
+                      alignSelf: 'flex-start',
+                      backgroundColor: colors.primary,
+                      borderRadius: 8,
+                      paddingVertical: 6,
+                      paddingHorizontal: 16,
+                      minWidth: 120,
+                      maxWidth: 180,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      ...Platform.select({ web: { cursor: 'pointer' } })
+                    }}
+                    onPress={async () => {
+                      await window.registerPushServiceWorker();
+                      window.__pushSubscribed = true;
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Enable Push Notifications</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <TouchableOpacity
