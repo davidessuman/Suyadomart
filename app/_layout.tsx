@@ -26,7 +26,12 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManage
       const { data: { user } } = await supabase.auth.getUser();
       const user_id = user ? user.id : null;
       console.log('[Push] user_id:', user_id);
-      const resp = await fetch('http://localhost:4000/api/save-subscription', {
+      // Use Vercel endpoint in production, localhost in dev
+      const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+      const backendUrl = isProd
+        ? 'https://www.suyadomart.com/api/save-subscription'
+        : 'http://localhost:4000/api/save-subscription';
+      const resp = await fetch(backendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
