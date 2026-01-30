@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 // ...existing code...
 // Helper to check if a date is more than 24 hours in the past
