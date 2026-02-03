@@ -101,7 +101,7 @@ const DARK_TEXT = '#FFFFFF';
 
 // === CATEGORY STRUCTURE ===
 const categoryStructure = {
-  Fashion: ['Dresses', 'Tops & Shirts', 'Pants & Jeans', 'Skirts', 'Jackets', 'Footwear', 'Bags', 'Watches', 'Jewelry', 'Accessories', 'Other Fashion'],
+  Fashion: ['Dresses', 'Tops & Shirts', 'Trousers & Jeans', 'Skirts', 'Jackets', 'Footwear', 'Bags', 'Watches', 'Jewelry', 'Accessories', 'Underwears', 'Other Fashion'],
   Electronics: ['Phones', 'Laptops', 'Tablets', 'Headphones', 'Chargers', 'Gaming', 'Accessories', 'Other Electronics'],
   Beauty: ['Skincare', 'Makeup', 'Hair Care', 'Fragrance', 'Tools'],
   Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
@@ -3031,7 +3031,7 @@ const getProductSubCategoryIcon = (mainCategory: string, subCategory: string) =>
     Fashion: {
       'Dresses': 'rose-outline',
       'Tops & Shirts': 'shirt-outline',
-      'Pants & Jeans': 'walk-outline',
+      'Trousers & Jeans': 'walk-outline',
       'Skirts': 'woman-outline',
       'Jackets': 'shield-outline',
       'Footwear': 'footsteps-outline',
@@ -3039,6 +3039,7 @@ const getProductSubCategoryIcon = (mainCategory: string, subCategory: string) =>
       'Watches': 'watch-outline',
       'Jewelry': 'diamond-outline',
       'Accessories': 'glasses-outline',
+      'Underwears': 'body-outline',
       'Other Fashion': 'ellipsis-horizontal-outline',
     },
     Electronics: {

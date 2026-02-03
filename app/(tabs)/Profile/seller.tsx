@@ -172,7 +172,7 @@ const electronicsBrands: Record<string, string[]> = {
 
 // Category structure - UPDATED WITH SERVICES
 const categoryStructure = {
-  Fashion: ['Dresses', 'Tops & Shirts', 'Pants & Jeans', 'Skirts', 'Jackets', 'Footwear', 'Bags', 'Watches', 'Jewelry', 'Accessories', 'Other Fashion'],
+  Fashion: ['Dresses', 'Tops & Shirts', 'Trousers & Jeans', 'Skirts', 'Jackets', 'Footwear', 'Bags', 'Watches', 'Jewelry', 'Accessories', 'Underwears', 'Other Fashion'],
   Electronics: ['Phones', 'Laptops', 'Tablets', 'Headphones', 'Chargers', 'Gaming', 'Accessories', 'Other Electronics'],
   Beauty: ['Skincare', 'Makeup', 'Hair Care', 'Fragrance', 'Tools'],
   Home: ['Furniture', 'Decor', 'Kitchen', 'Bedding', 'Appliances'],
@@ -698,6 +698,8 @@ function SellerDashboardContent() {
   const [addProductModal, setAddProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [selectedMedia, setSelectedMedia] = useState<{ uri: string; type: 'image' | 'video' }[]>([]);
+  // Underwears type state
+  const [underwearType, setUnderwearType] = useState<string>('');
   const [posting, setPosting] = useState(false);
   const [title, setTitle] = useState('');
   const [originalPrice, setOriginalPrice] = useState('');
@@ -935,19 +937,33 @@ function SellerDashboardContent() {
     if (!mainCategory || !subCategory || !productGender) return [];
     const isFashion = mainCategory === 'Fashion';
     const isSports = mainCategory === 'Sports';
+    // Underwears type logic
+    if (isFashion && subCategory === 'Underwears' && underwearType) {
+      if (['Boxers', 'Briefs', 'Trunks', 'Singlets'].includes(underwearType) && productGender === 'Men') {
+        return sizeOptions.menClothing;
+      }
+      if (['Panties', 'Bikinis', 'Thongs', 'Brazziers'].includes(underwearType) && productGender === 'Women') {
+        return sizeOptions.womenClothing;
+      }
+      // Unisex or others
+      if (productGender === 'Unisex') {
+        return [...sizeOptions.menClothing, ...sizeOptions.womenClothing];
+      }
+      return [];
+    }
     if (subCategory === 'Dresses' && productGender === 'Women') return sizeOptions.womenDresses;
     if (isFashion && ['Tops & Shirts', 'Jackets', 'Skirts'].includes(subCategory)) {
       return productGender === 'Men' ? sizeOptions.menClothing : sizeOptions.womenClothing;
     }
-    if (subCategory === 'Pants & Jeans') return productGender === 'Men' ? sizeOptions.menPants : sizeOptions.womenPants;
+    if (subCategory === 'Trousers & Jeans') return productGender === 'Men' ? sizeOptions.menPants : sizeOptions.womenPants;
     if (isSports && ['Gym Wear', 'Jersey'].includes(subCategory)) return productGender === 'Men' ? sizeOptions.menClothing : sizeOptions.womenClothing;
     if (subCategory === 'Footwear') return sizeOptions.shoes;
     return [];
-  }, [mainCategory, subCategory, productGender]);
+  }, [mainCategory, subCategory, productGender, underwearType]);
 
   const sizeSectionTitle = useMemo(() => {
     if (subCategory === 'Dresses') return 'Dress Size (UK) *';
-    if (subCategory === 'Pants & Jeans') return 'Waist Size (inches) *';
+    if (subCategory === 'Trousers & Jeans') return 'Waist Size (inches) *';
     if (subCategory === 'Footwear') return 'Shoe Size (EU) *';
     return 'Available Sizes *';
   }, [subCategory]);
@@ -3612,6 +3628,7 @@ function SellerDashboardContent() {
           is_service: isService,
           media_urls: [],
           seller_id: session!.user.id,
+          underwear_type: mainCategory === 'Fashion' && subCategory === 'Underwears' ? underwearType : null,
         };
        
         const { data: newProduct, error: insertError } = await supabase
@@ -3707,6 +3724,7 @@ function SellerDashboardContent() {
         pre_order_duration_unit: isService || !isPreOrder ? null : preOrderDurationUnit,
         description: description.trim() || null,
         media_urls: finalMediaUrls,
+        underwear_type: mainCategory === 'Fashion' && subCategory === 'Underwears' ? underwearType : null,
       };
      
       if (editingProduct) {
@@ -4066,6 +4084,23 @@ function SellerDashboardContent() {
                 </ScrollView>
               </View>
             )}
+              {/* Underwears Type Section */}
+              {mainCategory === 'Fashion' && subCategory === 'Underwears' && (
+                <View style={[styles.sectionContainer, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+                  <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Underwear Type *</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                    {['Singlets', 'Boxers', 'Briefs', 'Panties', 'Trunks', 'Bikinis', 'Thongs', 'Brazziers', 'Other'].map((type) => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[styles.categoryChip, underwearType === type && [styles.categoryChipActive, { backgroundColor: themeColors.chipActiveBackground, borderColor: themeColors.chipActiveBorder }], { backgroundColor: themeColors.chipBackground }]}
+                        onPress={() => setUnderwearType(type)}
+                      >
+                        <Text style={[styles.categoryText, underwearType === type && [styles.categoryTextActive, { color: themeColors.primary }], { color: themeColors.text }]}>{type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             {subCategory === 'Beauty Services' && (
               <View style={[styles.sectionContainer, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
                 <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Beauty Service Type *</Text>
