@@ -964,7 +964,7 @@ export default function ProfileScreen() {
             style={styles.sellerBackground}
             resizeMode="cover"
           >
-            <View style={[styles.sellerOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
+            <View style={[styles.sellerOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]} />
             <View style={styles.sellerContent}>
               <View style={styles.sellerHeader}>
                 <View style={[styles.sellerBadge, { backgroundColor: colors.primary }]}>
@@ -980,12 +980,12 @@ export default function ProfileScreen() {
               
               <View style={styles.sellerInfo}>
                 <View style={styles.infoCard}>
-                  <MaterialCommunityIcons name="store" size={20} color={colors.text} />
-                  <Text style={[styles.infoText, { color: colors.text }]}>{shopData?.name || 'Shop Name'}</Text>
+                  <MaterialCommunityIcons name="store" size={20} color="white" />
+                  <Text style={[styles.infoText, { color: 'white' }]}>{shopData?.name || 'Shop Name'}</Text>
                 </View>
                 <View style={styles.infoCard}>
-                  <Ionicons name="school" size={20} color={colors.text} />
-                  <Text style={[styles.infoText, { color: colors.text }]}>{profile?.university}</Text>
+                  <Ionicons name="school" size={20} color="white" />
+                  <Text style={[styles.infoText, { color: 'white' }]}>{profile?.university}</Text>
                 </View>
               </View>
               

@@ -4149,7 +4149,7 @@ export default function SearchScreen() {
         .from('products')
         .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(1000);
 
       const { data, error } = await query;
 
@@ -4210,7 +4210,7 @@ export default function SearchScreen() {
       query = query.limit(50);
     } else {
       // For Home section, fetch more products (all products from campus)
-      query = query.limit(200);
+      query = query.limit(1000);
     }
 
     const { data } = await query;
@@ -4405,7 +4405,7 @@ export default function SearchScreen() {
         queryBuilder = queryBuilder.eq('category', selectedCategoryFilter);
       }
 
-      queryBuilder = queryBuilder.order('created_at', { ascending: false }).limit(200);
+      queryBuilder = queryBuilder.order('created_at', { ascending: false }).limit(1000);
 
       const { data } = await queryBuilder;
 
@@ -4462,7 +4462,7 @@ export default function SearchScreen() {
         .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
         .or(`title.ilike.%${text}%,category.ilike.%${text}%`)
         .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(1000);
 
       // If shop IDs were found, also search by seller_id
       if (shopIds.length > 0) {
