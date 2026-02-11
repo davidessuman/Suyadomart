@@ -122,7 +122,7 @@ export default function ProfileScreen() {
     primaryDark: '#f57c00',
     background: isDarkMode ? '#0f172a' : '#f8fafc',
     card: isDarkMode ? '#1e293b' : '#ffffff',
-    text: isDarkMode ? '#0418f5' : '#0418f5',
+    text: isDarkMode ? '#ffffff' : '#f5f6f8',
     textSecondary: isDarkMode ? '#94a3b8' : '#64748b',
     border: isDarkMode ? '#334155' : '#e2e8f0',
     inputBg: isDarkMode ? '#1e293b' : '#ffffff',
@@ -900,8 +900,35 @@ export default function ProfileScreen() {
                       ...Platform.select({ web: { cursor: 'pointer' } })
                     }}
                     onPress={async () => {
-                      await window.registerPushServiceWorker();
-                      window.__pushSubscribed = true;
+                      try {
+                        const result = await window.registerPushServiceWorker();
+                        if (!result) {
+                          Alert.alert(
+                            'Push Registration Failed',
+                            'Could not enable push notifications. Please check your browser settings or try again.'
+                          );
+                          return;
+                        }
+                        // Check if subscription was saved
+                        if (result && result.endpoint) {
+                          window.__pushSubscribed = true;
+                          Alert.alert(
+                            'Push Notifications Enabled',
+                            'You will now receive notifications from this website.'
+                          );
+                        } else {
+                          Alert.alert(
+                            'Push Registration Failed',
+                            'Subscription was not saved. Please try again.'
+                          );
+                        }
+                      } catch (err) {
+                        Alert.alert(
+                          'Push Registration Error',
+                          'An error occurred while enabling push notifications.'
+                        );
+                        console.error('Push registration error:', err);
+                      }
                     }}
                   >
                     <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Enable Push Notifications</Text>

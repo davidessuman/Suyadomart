@@ -122,11 +122,7 @@ export default function RootLayout() {
 
     initializeApp();
 
-    // Ensure push registration is called and visible in console, only after session is set
-    if (typeof window !== 'undefined' && window.registerPushServiceWorker && session) {
-      console.log('[Push] Calling window.registerPushServiceWorker() from useEffect');
-      window.registerPushServiceWorker();
-    }
+    // Removed automatic push registration. Registration now only happens on button press for proper browser permission dialog.
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);

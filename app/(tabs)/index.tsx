@@ -2895,8 +2895,19 @@ const extractKeywords = (title: string): string[] => {
 };
 
 const scoreAndSortProducts = (products: any[]): Product[] => {
+  // Randomize products fully, boost by user activity and order products
+  // Example user activity: likes, shares, views, orders
+  // If product has user activity, boost its score
   const scored = products.map(p => {
-    let score = Math.random() * 1.5;
+    let score = Math.random();
+    // Boost for user activity
+    if (p.isLiked) score += 2;
+    if (p.isShared) score += 1.5;
+    if (p.likeCount) score += Math.min(p.likeCount * 0.1, 2);
+    if (p.shareCount) score += Math.min(p.shareCount * 0.1, 1);
+    if (p.view_count) score += Math.min(p.view_count * 0.01, 1);
+    if (p.orderCount) score += Math.min(p.orderCount * 0.2, 2);
+    // Boost for discounted products
     if (p.original_price && p.original_price > p.price) {
       const discountRatio = (p.original_price - p.price) / p.original_price;
       score += discountRatio * 5;
@@ -2911,8 +2922,102 @@ const scoreAndSortProducts = (products: any[]): Product[] => {
       isVideo: p.media_urls?.[0]?.toLowerCase().includes('.mp4'),
     } as Product;
   });
+  // Shuffle the array for full randomization
+  for (let i = scored.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [scored[i], scored[j]] = [scored[j], scored[i]];
+  }
+  // Sort by score descending
   scored.sort((a, b) => b.score - a.score);
-  return scored;
+
+  // Interleave products to avoid consecutive same seller
+  const interleaved: Product[] = [];
+  const sellerBuckets: { [sellerId: string]: Product[] } = {};
+  scored.forEach(p => {
+    if (!sellerBuckets[p.seller_id]) sellerBuckets[p.seller_id] = [];
+    sellerBuckets[p.seller_id].push(p);
+  });
+  const sellerIds = Object.keys(sellerBuckets);
+  let index = 0;
+  while (interleaved.length < scored.length) {
+    for (const sellerId of sellerIds) {
+      if (sellerBuckets[sellerId][index]) {
+        interleaved.push(sellerBuckets[sellerId][index]);
+      }
+    }
+    index++;
+  }
+
+  // Prevent more than two consecutive products from the same category or seller
+  const finalFeed: Product[] = [];
+  for (let i = 0; i < interleaved.length; i++) {
+    const current = interleaved[i];
+    const last1 = finalFeed[finalFeed.length - 1];
+    const last2 = finalFeed[finalFeed.length - 2];
+    // Prevent more than two consecutive from same category
+    if (
+      last1 && last2 &&
+      last1.category === current.category &&
+      last2.category === current.category
+    ) {
+      let swapIndex = i + 1;
+      while (swapIndex < interleaved.length && interleaved[swapIndex].category === current.category) {
+        swapIndex++;
+      }
+      if (swapIndex < interleaved.length) {
+        [interleaved[i], interleaved[swapIndex]] = [interleaved[swapIndex], interleaved[i]];
+      }
+    }
+    // Prevent more than two consecutive from same seller
+    if (
+      last1 && last2 &&
+      last1.seller_id === current.seller_id &&
+      last2.seller_id === current.seller_id
+    ) {
+      let swapIndex = i + 1;
+      while (swapIndex < interleaved.length && interleaved[swapIndex].seller_id === current.seller_id) {
+        swapIndex++;
+      }
+      if (swapIndex < interleaved.length) {
+        [interleaved[i], interleaved[swapIndex]] = [interleaved[swapIndex], interleaved[i]];
+      }
+    }
+    finalFeed.push(interleaved[i]);
+  }
+
+  // Personalization: boost categories user interacts with
+  // Trending/featured/new products mixing
+  // After two new products, show some older products
+  const newProducts = finalFeed.filter(p => {
+    const daysSinceUpload = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpload < 3;
+  });
+  const olderProducts = finalFeed.filter(p => {
+    const daysSinceUpload = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpload >= 3;
+  });
+  // Mix trending/featured
+  const trending = finalFeed.filter(p => p.is_trending);
+  const featured = finalFeed.filter(p => p.is_featured);
+  // Personalization: boost categories (example: userPreferredCategories)
+  // This is a placeholder, replace with actual user preference
+  const userPreferredCategories = ['Fashion', 'Electronics'];
+  const personalized = finalFeed.filter(p => userPreferredCategories.includes(p.category));
+
+  // Build the final feed
+  let mixedFeed: Product[] = [];
+  // Add two new products
+  mixedFeed = mixedFeed.concat(newProducts.slice(0, 2));
+  // Add trending/featured/personalized
+  mixedFeed = mixedFeed.concat(trending.slice(0, 2));
+  mixedFeed = mixedFeed.concat(featured.slice(0, 2));
+  mixedFeed = mixedFeed.concat(personalized.slice(0, 2));
+  // Add older products
+  mixedFeed = mixedFeed.concat(olderProducts.slice(0, 6));
+  // Fill up with remaining products, avoiding duplicates
+  const usedIds = new Set(mixedFeed.map(p => p.id));
+  mixedFeed = mixedFeed.concat(finalFeed.filter(p => !usedIds.has(p.id)));
+  return mixedFeed;
 };
 
 // === CART MANAGER ===
@@ -3704,7 +3809,7 @@ const SimilarProductsSection: React.FC<{
 
   return (
     <View style={[styles.similarContainer, { borderTopColor: theme.border }]}>
-      <Text style={[styles.similarTitle, { color: theme.text }]}> Similar products you might like </Text>
+      <Text style={[styles.similarTitle, { color: theme.text }]}> Other Products you might like </Text>
       <FlatList
         data={similarProducts}
         horizontal
@@ -5745,7 +5850,9 @@ const SellerProfileModal: React.FC<{
           totalLikes = likeCount || 0;
         }
         
-        const enriched = (rawProducts || []).map(p => {
+        // Use scoreAndSortProducts to fairly/randomly sort seller's products
+        const scored = scoreAndSortProducts(rawProducts || []);
+        const enriched = scored.map(p => {
           let avatarUrl;
           if (shop?.avatar_url) {
             avatarUrl = shop.avatar_url.startsWith('http')
@@ -8000,6 +8107,7 @@ export default function BuyerScreen() {
       const commentCounts = (commentsData || []).reduce((acc: any, c: any) => ({ ...acc, [c.product_id]: (acc[c.product_id] || 0) + 1 }), {});
       const followerCounts = (followsData || []).reduce((acc: any, f: any) => ({ ...acc, [f.shop_owner_id]: (acc[f.shop_owner_id] || 0) + 1 }), {});
       
+      // Use scoreAndSortProducts to fairly/randomly sort products, boosting older and discounted items
       const scored = scoreAndSortProducts(rawProducts);
       
       // Get seller info

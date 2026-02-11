@@ -1899,7 +1899,7 @@ const EnhancedSimilarProductsSection: React.FC<{
   return (
     <View style={[styles.similarContainer, { borderTopColor: borderColor }]}>
       <Text style={[styles.similarTitle, { color: textColor }]}>
-        Similar Products You Might Like
+        Other Products You Might Like
       </Text>
       {loading ? (
         <View style={styles.similarLoadingContainer}>
@@ -4537,7 +4537,13 @@ export default function SearchScreen() {
 
     // If no category filter is selected, show only "All Products" section with all products
     if (!filterCategory) {
-      return products.length > 0 ? [{ title: 'All Products', data: products }] : [];
+      // Shuffle products for All Products section
+      const shuffled = [...products];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled.length > 0 ? [{ title: 'All Products', data: shuffled }] : [];
     }
 
     // If a category is selected, group products by that category
