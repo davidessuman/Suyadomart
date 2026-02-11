@@ -122,11 +122,11 @@ export default function ProfileScreen() {
     primaryDark: '#f57c00',
     background: isDarkMode ? '#0f172a' : '#f8fafc',
     card: isDarkMode ? '#1e293b' : '#ffffff',
-    text: isDarkMode ? '#ffffff' : '#f5f6f8',
-    textSecondary: isDarkMode ? '#94a3b8' : '#64748b',
-    border: isDarkMode ? '#334155' : '#e2e8f0',
+    text: isDarkMode ? '#ffffff' : '#010917',
+    textSecondary: isDarkMode ? '#94a3b8' : '#010811',
+    border: isDarkMode ? '#334155' : '#116ade',
     inputBg: isDarkMode ? '#1e293b' : '#ffffff',
-    error: isDarkMode ? '#fca5a5' : '#ef4444',
+    error: isDarkMode ? '#790404' : '#ef4444',
     success: isDarkMode ? '#86efac' : '#10b981',
     warning: isDarkMode ? '#fcd34d' : '#f59e0b',
     overlay: isDarkMode ? 'rgba(15, 23, 42, 0.95)' : 'rgba(0, 0, 0, 0.85)',
@@ -714,7 +714,7 @@ export default function ProfileScreen() {
             <View style={[styles.modalSheet, { backgroundColor: colors.modalBg }]}>
               <View style={styles.modalHeader}>
                 <View style={styles.headerContent}>
-                  <MaterialCommunityIcons name="university" size={28} color={colors.primary} />
+                  <MaterialCommunityIcons name="school" size={28} color={colors.primary} />
                   <Text style={[styles.modalTitle, { color: colors.text }]}>Choose your campus</Text>
                 </View>
                 <TouchableOpacity
@@ -1012,7 +1012,7 @@ export default function ProfileScreen() {
           <View style={[styles.modalSheet, { backgroundColor: colors.modalBg }]}>
             <View style={styles.modalHeader}>
               <View style={styles.headerContent}>
-                <MaterialCommunityIcons name="university" size={28} color={colors.primary} />
+                <MaterialCommunityIcons name="account" size={28} color={colors.primary} />
                 <Text style={[styles.modalTitle, { color: colors.text }]}>Profile Settings</Text>
               </View>
               <TouchableOpacity 
