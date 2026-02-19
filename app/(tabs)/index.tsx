@@ -31,6 +31,7 @@ import { formatDistanceToNow, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams, usePathname } from 'expo-router';
+// ...existing code...
 
 import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
 import { getSelectedCampus } from '@/lib/campus';
@@ -7984,8 +7985,8 @@ export default function BuyerScreen() {
   const loadProducts = useCallback(async (currentPage: number) => {
     if (!hasMore && currentPage > 0) return;
 
-    // Skip university gating on onboarding/auth routes so we don't show alerts there
-    const skipUniversityCheck = pathname?.includes('onboarding') || pathname?.includes('auth');
+    // Skip university gating on onboarding/auth/admin routes so we don't show alerts there
+    const skipUniversityCheck = pathname?.includes('onboarding') || pathname?.includes('auth') || pathname?.includes('admin');
     if (skipUniversityCheck) {
       setLoadingInitial(false);
       setLoadingMore(false);

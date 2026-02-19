@@ -143,7 +143,11 @@ export default function RootLayout() {
       const inOnboarding = segments[0] === 'onboarding';
       const inAuth = segments[0] === 'auth';
       const inTabs = segments[0] === '(tabs)';
+      const inAdmin = segments[0] === 'admin';
       const otpPending = await AsyncStorage.getItem('otp_pending');
+
+      // Exclude /admin route from onboarding/campus logic
+      if (inAdmin) return;
 
       // RootLayout reads selectedCampus on mount, but onboarding can update it later.
       // Re-check storage here so navigation updates immediately (web otherwise needs refresh).
@@ -214,6 +218,8 @@ export default function RootLayout() {
           <Stack.Screen name="auth" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="admin" />
+          <Stack.Screen name="admin/dashboard" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>
