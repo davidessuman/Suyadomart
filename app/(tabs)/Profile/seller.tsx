@@ -2854,9 +2854,16 @@ function SellerDashboardContent() {
       setSession(session);
 
       const [{ data: profileData }, { data: shopData }] = await Promise.all([
-        supabase.from('user_profiles').select('full_name, avatar_url, university, username').eq('id', session.user.id).single(),
+        supabase.from('user_profiles').select('full_name, avatar_url, university, username, is_seller').eq('id', session.user.id).single(),
         supabase.from('shops').select('name, phone, location').eq('owner_id', session.user.id).single(),
       ]);
+
+      // Guard: redirect non-sellers back to the buyer profile page
+      if (!profileData?.is_seller) {
+        console.log('🚫 User is not a seller, redirecting to profile...');
+        router.replace('/(tabs)/Profile');
+        return;
+      }
 
       setProfile(profileData); setShop(shopData);
       
