@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ADMIN_CREDENTIALS = {
   username: 'admin',
@@ -19,12 +18,12 @@ const AdminPage = () => {
 
   const handleAdminLogin = () => {
     setAuthLoading(true);
-    setTimeout(async () => {
+    setTimeout(() => {
       if (
         adminUsername === ADMIN_CREDENTIALS.username &&
         adminPassword === ADMIN_CREDENTIALS.password
       ) {
-        await AsyncStorage.setItem('admin_authenticated', 'true');
+        sessionStorage.setItem('admin_authenticated', 'true');
         setIsAdmin(true);
         setAuthVisible(false);
         setAuthError('');
@@ -33,7 +32,7 @@ const AdminPage = () => {
           router.replace('/admin/dashboard');
         }, 300);
       } else {
-        await AsyncStorage.removeItem('admin_authenticated');
+        sessionStorage.removeItem('admin_authenticated');
         setAuthError('Access Denied: Invalid admin credentials');
         setTimeout(() => {
           router.replace('/onboarding');
