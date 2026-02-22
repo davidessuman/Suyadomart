@@ -105,23 +105,17 @@ const AdminPage = () => {
     setAuthLoading(true);
     setAuthError('');
     try {
-      // Check if email exists in admins table and is active
-      const emailToCheck = adminEmail.trim().toLowerCase();
-      const { data: adminRecord, error: adminError, status } = await supabase
-        .from('admins')
-        .select('email, is_active')
-        .ilike('email', emailToCheck)
-        .single();
-      // If RLS blocks, status will be 406 or 403, treat as not found
-      if (adminError || status === 406 || status === 403 || !adminRecord || !adminRecord.is_active) {
-        setAuthError('This email is not registered as an admin.');
+      const emailToUse = adminEmail.trim().toLowerCase();
+      if (!isValidEmail(emailToUse)) {
+        setAuthError('Please enter a valid email address.');
         setAuthLoading(false);
-        router.replace('/onboarding');
         return;
       }
-      // Only send OTP if admin
+
+      // Send OTP first, then enforce admin authorization after verify.
+      // This avoids pre-auth queries against the admins table, which are blocked by RLS for anon users.
       const { error } = await supabase.auth.signInWithOtp({
-        email: adminEmail,
+        email: emailToUse,
         options: { shouldCreateUser: false },
       });
       if (error) {
@@ -161,10 +155,20 @@ const AdminPage = () => {
         .select('id, is_active')
         .eq('user_id', data.user.id)
         .single();
-      if (adminError || !adminRecord || !adminRecord.is_active) {
+      if (adminError || !adminRecord) {
         sessionStorage.removeItem('admin_authenticated');
         setAuthError('Access Denied: Not an admin');
         router.replace('/onboarding');
+        setAuthLoading(false);
+        return;
+      }
+      // Check if admin is active
+      if (!adminRecord.is_active) {
+        sessionStorage.removeItem('admin_authenticated');
+        setAuthError('Your admin account has been deactivated. Contact the master admin.');
+        setTimeout(() => {
+          router.replace('/onboarding');
+        }, 3000);
         setAuthLoading(false);
         return;
       }

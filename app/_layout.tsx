@@ -144,6 +144,10 @@ export default function RootLayout() {
       const inAuth = segments[0] === 'auth';
       const inTabs = segments[0] === '(tabs)';
       const inAdmin = segments[0] === 'admin';
+      const isAdminSession =
+        Platform.OS === 'web' &&
+        typeof window !== 'undefined' &&
+        window.sessionStorage?.getItem('admin_authenticated') === 'true';
       const otpPending = await AsyncStorage.getItem('otp_pending');
 
       // Exclude /admin route from onboarding/campus logic
@@ -161,7 +165,7 @@ export default function RootLayout() {
 
       // Campus selection is required before browsing.
       // Allow /auth without campus ONLY when OTP is pending.
-      if (!effectiveCampus) {
+      if (!effectiveCampus && !isAdminSession) {
         if (otpPending === 'true') {
           if (!inAuth) router.replace('/auth');
           return;

@@ -89,7 +89,8 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       case 'warning':
         return { backgroundColor: themeColors.warning, icon: 'warning' };
       case 'confirm':
-        return { backgroundColor: themeColors.primary, icon: 'help-circle' };
+        // Use a calm, professional blue tone for confirmations (e.g. logout)
+        return { backgroundColor: themeColors.info, icon: 'help-circle' };
       default:
         return { backgroundColor: themeColors.info, icon: 'information-circle' };
     }
