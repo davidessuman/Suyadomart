@@ -64,7 +64,7 @@ import {
   Animated,
   RefreshControl,
 } from 'react-native';
-import { GoogleCalendarButton } from '../components/GoogleCalendarButton';
+import { GoogleCalendarButton } from '@/components/GoogleCalendarButton';
 // import { Linking, Platform } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { supabase } from '@/lib/supabase';

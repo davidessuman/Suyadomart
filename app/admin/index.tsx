@@ -112,8 +112,25 @@ const AdminPage = () => {
         return;
       }
 
-      // Send OTP first, then enforce admin authorization after verify.
-      // This avoids pre-auth queries against the admins table, which are blocked by RLS for anon users.
+      const { data: isAllowedAdminEmail, error: adminLookupError } = await supabase.rpc('is_allowed_admin_email', {
+        p_email: emailToUse,
+      });
+
+      if (adminLookupError) {
+        setAuthError('Unable to verify admin email at the moment. Please try again.');
+        setAuthLoading(false);
+        return;
+      }
+
+      if (!isAllowedAdminEmail) {
+        setAuthError('Access denied. This email is not authorized for admin login.');
+        setTimeout(() => {
+          router.replace('/onboarding');
+        }, 1500);
+        setAuthLoading(false);
+        return;
+      }
+
       const { error } = await supabase.auth.signInWithOtp({
         email: emailToUse,
         options: { shouldCreateUser: false },

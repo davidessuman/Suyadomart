@@ -86,8 +86,8 @@ import { formatDistanceToNow } from 'date-fns';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
-import ResponsiveVideo from '../components/ResponsiveVideo';
+import { ProductReviewsSection } from '@/components/ProductReviewsSection';
+import ResponsiveVideo from '@/components/ResponsiveVideo';
 import { Video, ResizeMode } from 'expo-av';
 import { getSelectedCampus } from '@/lib/campus';
 

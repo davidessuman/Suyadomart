@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { format } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ClipboardExpo from 'expo-clipboard';
-import ResponsiveVideo from '../../components/ResponsiveVideo';
+import ResponsiveVideo from '@/components/ResponsiveVideo';
 import { Video, ResizeMode } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
@@ -130,6 +130,52 @@ const GHANA_UNIVERSITIES = [
   'Academic City University College', 
   'Radford University College'
 ];
+
+const UNIVERSITY_ABBREVIATIONS: Record<string, string> = {
+  UG: 'University of Ghana',
+  KNUST: 'Kwame Nkrumah University of Science and Technology',
+  UCC: 'University of Cape Coast',
+  UEW: 'University of Education, Winneba',
+  UDS: 'University for Development Studies',
+  UENR: 'University of Energy and Natural Resources',
+  UMAT: 'University of Mines and Technology',
+  UHAS: 'University of Health and Allied Sciences',
+  GIMPA: 'Ghana Institute of Management and Public Administration',
+  UPSA: 'University of Professional Studies, Accra',
+  ATU: 'Accra Technical University',
+  KTU: 'Kumasi Technical University',
+  TTU: 'Takoradi Technical University',
+  HTU: 'Ho Technical University',
+  CCTU: 'Cape Coast Technical University',
+  BTU: 'Bolgatanga Technical University',
+  KoforiduaTU: 'Koforidua Technical University',
+  TamaleTU: 'Tamale Technical University',
+  STU: 'Sunyani Technical University',
+  REGENT: 'Regent University College of Science and Technology',
+  ASHESI: 'Ashesi University',
+  CENTRAL: 'Central University',
+  VVU: 'Valley View University',
+  PENTECOST: 'Pentecost University',
+  METHODIST: 'Methodist University College Ghana',
+  PRESBY: 'Presbyterian University College, Ghana',
+  CATHOLIC: 'Catholic University College of Ghana',
+  CSUC: 'Christian Service University College',
+  WISCONSIN: 'Wisconsin International University College, Ghana',
+  LANCASTER: 'Lancaster University Ghana',
+  ACADEMIC: 'Academic City University College',
+  RADFORD: 'Radford University College',
+};
+
+const ACRONYM_STOPWORDS = new Set(['of', 'for', 'and', 'the', 'in', 'at', 'on']);
+
+const getUniversityAcronym = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter((word) => /[A-Za-z]/.test(word[0]) && !ACRONYM_STOPWORDS.has(word.toLowerCase()))
+    .map((word) => word[0].toUpperCase())
+    .join('');
+
+const normalizeAbbreviationToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // ==================== CUSTOM ALERT SYSTEM ====================
 type AlertType = 'info' | 'success' | 'error' | 'warning' | 'confirm';
@@ -760,9 +806,32 @@ function SellerDashboardContent() {
     if (searchText.trim() === '') {
       setFilteredUniversities(GHANA_UNIVERSITIES);
     } else {
-      const filtered = GHANA_UNIVERSITIES.filter(university =>
-        university.toLowerCase().includes(searchText.toLowerCase())
+      const query = searchText.trim().toLowerCase();
+      const normalizedQuery = normalizeAbbreviationToken(query);
+
+      const abbreviationMatch = Object.entries(UNIVERSITY_ABBREVIATIONS).find(
+        ([abbreviation]) => normalizeAbbreviationToken(abbreviation) === normalizedQuery
       );
+
+      if (abbreviationMatch) {
+        const matchedUniversity = abbreviationMatch[1];
+        setFilteredUniversities(
+          GHANA_UNIVERSITIES.includes(matchedUniversity) ? [matchedUniversity] : []
+        );
+        return;
+      }
+
+      const filtered = GHANA_UNIVERSITIES.filter((university) => {
+        const normalizedName = university.toLowerCase();
+        const acronym = getUniversityAcronym(university).toLowerCase();
+        const normalizedAcronym = normalizeAbbreviationToken(acronym);
+
+        return (
+          normalizedName.includes(query) ||
+          acronym.includes(query) ||
+          normalizedAcronym.includes(normalizedQuery)
+        );
+      });
       setFilteredUniversities(filtered);
     }
   };

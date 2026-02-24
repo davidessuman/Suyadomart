@@ -5,7 +5,7 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
+  ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
@@ -34,6 +34,9 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({ visible, admin, onClose
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [rolePickerVisible, setRolePickerVisible] = useState(false);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [roleOptions, setRoleOptions] = useState<string[]>([]);
   const { showAlert } = useAlert();
 
   React.useEffect(() => {
@@ -42,6 +45,43 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({ visible, admin, onClose
       setIsActive(admin.is_active);
     }
   }, [admin]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+
+    const loadRoleOptions = async () => {
+      setRolesLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('admins')
+          .select('role')
+          .not('role', 'is', null);
+
+        if (error) throw error;
+
+        const roles = Array.from(
+          new Set(
+            (data || [])
+              .map((item) => (typeof item.role === 'string' ? item.role.trim() : ''))
+              .filter((item) => item.length > 0)
+          )
+        ).sort((a, b) => a.localeCompare(b));
+
+        if (admin?.role && admin.role.trim().length > 0 && !roles.includes(admin.role.trim())) {
+          roles.unshift(admin.role.trim());
+        }
+
+        setRoleOptions(roles);
+      } catch (error) {
+        console.error('Error loading role options:', error);
+        setRoleOptions(admin?.role ? [admin.role] : []);
+      } finally {
+        setRolesLoading(false);
+      }
+    };
+
+    loadRoleOptions();
+  }, [visible, admin?.role]);
 
   const handleUpdate = async () => {
     if (!admin) return;
@@ -134,13 +174,20 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({ visible, admin, onClose
             {/* Role Input */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Role *</Text>
-              <TextInput
-                style={styles.input}
-                value={role}
-                onChangeText={setRole}
-                placeholder="e.g., Senior Admin, Moderator, Support"
-                placeholderTextColor="#94A3B8"
-              />
+              <TouchableOpacity
+                style={styles.roleSelector}
+                onPress={() => setRolePickerVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.roleSelectorText, !role && styles.roleSelectorPlaceholder]}>
+                  {role || 'Select a role'}
+                </Text>
+                {rolesLoading ? (
+                  <ActivityIndicator size="small" color="#64748B" />
+                ) : (
+                  <Text style={styles.roleSelectorChevron}>▾</Text>
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* Status Toggle */}
@@ -263,6 +310,54 @@ const EditAdminModal: React.FC<EditAdminModalProps> = ({ visible, admin, onClose
             </View>
           </View>
         )}
+
+        <Modal
+          visible={rolePickerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRolePickerVisible(false)}
+        >
+          <View style={styles.rolePickerOverlay}>
+            <View style={styles.rolePickerCard}>
+              <View style={styles.rolePickerHeader}>
+                <Text style={styles.rolePickerTitle}>Select Role</Text>
+                <TouchableOpacity
+                  style={styles.rolePickerCloseButton}
+                  onPress={() => setRolePickerVisible(false)}
+                >
+                  <Text style={styles.rolePickerCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.rolePickerList} showsVerticalScrollIndicator={false}>
+                {roleOptions.length === 0 ? (
+                  <View style={styles.rolePickerEmptyState}>
+                    <Text style={styles.rolePickerEmptyText}>No roles found in admins table.</Text>
+                  </View>
+                ) : (
+                  roleOptions.map((option) => {
+                    const isSelected = option === role;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={[styles.roleOption, isSelected && styles.roleOptionSelected]}
+                        onPress={() => {
+                          setRole(option);
+                          setRolePickerVisible(false);
+                        }}
+                      >
+                        <Text style={[styles.roleOptionText, isSelected && styles.roleOptionTextSelected]}>
+                          {option}
+                        </Text>
+                        {isSelected ? <Text style={styles.roleOptionCheck}>✓</Text> : null}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -345,16 +440,30 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontWeight: '500',
   },
-  input: {
+  roleSelector: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#CBD5E1',
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  roleSelectorText: {
     fontSize: 15,
     color: '#0F172A',
     fontWeight: '500',
+    flex: 1,
+  },
+  roleSelectorPlaceholder: {
+    color: '#94A3B8',
+  },
+  roleSelectorChevron: {
+    fontSize: 16,
+    color: '#64748B',
+    marginLeft: 8,
   },
   toggleContainer: {
     flexDirection: 'row',
@@ -522,6 +631,99 @@ const styles = StyleSheet.create({
   },
   confirmDeleteText: {
     color: '#B91C1C',
+  },
+  rolePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  rolePickerCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '70%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  rolePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  rolePickerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  rolePickerCloseButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rolePickerCloseText: {
+    fontSize: 15,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  rolePickerList: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  roleOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  roleOptionSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  roleOptionText: {
+    fontSize: 14,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  roleOptionTextSelected: {
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  roleOptionCheck: {
+    fontSize: 14,
+    color: '#1D4ED8',
+    fontWeight: '800',
+  },
+  rolePickerEmptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rolePickerEmptyText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });
 

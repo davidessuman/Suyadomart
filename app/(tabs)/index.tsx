@@ -33,7 +33,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams, usePathname } from 'expo-router';
 // ...existing code...
 
-import { ProductReviewsSection } from '@/app/components/ProductReviewsSection';
+import { ProductReviewsSection } from '@/components/ProductReviewsSection';
 import { getSelectedCampus } from '@/lib/campus';
 
 // === PAYMENT SAFETY NOTICE COMPONENT (reused from search.tsx) ===

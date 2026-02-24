@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import EditAdminModal from './EditAdminModal';
 
@@ -85,6 +86,10 @@ const ViewAllAdminsModal: React.FC<ViewAllAdminsModalProps> = ({ visible, onClos
   };
 
   const handleEditAdmin = (admin: Admin) => {
+    if (admin.is_master_admin) {
+      return;
+    }
+
     setSelectedAdmin(admin);
     setEditModalVisible(true);
   };
@@ -158,14 +163,14 @@ const ViewAllAdminsModal: React.FC<ViewAllAdminsModalProps> = ({ visible, onClos
                     ]}
                   >
                     <View style={styles.nameColumn}>
+                      {admin.is_master_admin && (
+                        <View style={styles.masterBadge}>
+                          <Ionicons name="shield-checkmark" size={12} color="#FFFFFF" />
+                        </View>
+                      )}
                       <Text style={styles.nameText} numberOfLines={1}>
                         {getDisplayName(admin)}
                       </Text>
-                      {admin.is_master_admin && (
-                        <View style={styles.masterBadge}>
-                          <Text style={styles.masterBadgeText}>MASTER</Text>
-                        </View>
-                      )}
                     </View>
                     <Text style={[styles.cellText, styles.emailColumn]} numberOfLines={1}>
                       {admin.email}
@@ -184,7 +189,7 @@ const ViewAllAdminsModal: React.FC<ViewAllAdminsModalProps> = ({ visible, onClos
                     </View>
                     {isMasterAdmin && (
                       <View style={styles.actionsColumn}>
-                        {admin.user_id !== currentUserId && (
+                        {admin.user_id !== currentUserId && !admin.is_master_admin && (
                           <TouchableOpacity
                             style={styles.editButton}
                             onPress={() => handleEditAdmin(admin)}
@@ -358,18 +363,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   masterBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: '#FEF3C7',
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#312E81',
     borderWidth: 1,
-    borderColor: '#FCD34D',
-  },
-  masterBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#92400E',
-    letterSpacing: 0.5,
+    borderColor: '#1E1B4B',
   },
   rolePill: {
     alignSelf: 'flex-start',

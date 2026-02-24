@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { GHANA_UNIVERSITIES } from '@/constants/campuses';
-import { useSelectedCampus } from '@/app/hooks/useSelectedCampus';
+import { useSelectedCampus } from '@/hooks/useSelectedCampus';
 
 const PRIMARY = '#FF9900';
 const LOGO_URL = 'https://image2url.com/images/1764506443183-2ff76663-c119-4f05-93b4-d08e42895442.png';
@@ -56,6 +56,8 @@ const UNIVERSITY_ABBREVIATIONS: Record<string, string> = {
   ACADEMIC: 'Academic City University College',
   RADFORD: 'Radford University College',
 };
+
+const normalizeAbbreviationToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export default function OnboardingScreen() {
   const { width, height } = Dimensions.get('window');
@@ -114,10 +116,11 @@ export default function OnboardingScreen() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const normalizedQuery = normalizeAbbreviationToken(q);
     if (!q) return GHANA_UNIVERSITIES;
     // Check if the search matches a known abbreviation
     const abbrMatch = Object.entries(UNIVERSITY_ABBREVIATIONS).find(
-      ([abbr, name]) => abbr.toLowerCase() === q
+      ([abbr]) => normalizeAbbreviationToken(abbr) === normalizedQuery
     );
     if (abbrMatch) {
       return [abbrMatch[1]];
@@ -125,7 +128,8 @@ export default function OnboardingScreen() {
     return GHANA_UNIVERSITIES.filter((u) => {
       const name = u.toLowerCase();
       const acronym = getAcronym(u).toLowerCase();
-      return name.includes(q) || acronym.includes(q);
+      const normalizedAcronym = normalizeAbbreviationToken(acronym);
+      return name.includes(q) || acronym.includes(q) || normalizedAcronym.includes(normalizedQuery);
     });
   }, [search]);
 

@@ -25,7 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
 import { useFocusEffect } from '@react-navigation/native';
-import { useSelectedCampus } from '@/app/hooks/useSelectedCampus';
+import { useSelectedCampus } from '@/hooks/useSelectedCampus';
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,9 +42,45 @@ const GHANA_UNIVERSITIES = [
   'Lancaster University Ghana', 'Academic City University College', 'Radford University College'
 ].sort();
 
+const UNIVERSITY_ABBREVIATIONS: Record<string, string> = {
+  UG: 'University of Ghana',
+  KNUST: 'Kwame Nkrumah University of Science and Technology',
+  UCC: 'University of Cape Coast',
+  UEW: 'University of Education, Winneba',
+  UDS: 'University for Development Studies',
+  UENR: 'University of Energy and Natural Resources',
+  UMAT: 'University of Mines and Technology',
+  UHAS: 'University of Health and Allied Sciences',
+  GIMPA: 'Ghana Institute of Management and Public Administration',
+  UPSA: 'University of Professional Studies, Accra',
+  ATU: 'Accra Technical University',
+  KTU: 'Kumasi Technical University',
+  TTU: 'Takoradi Technical University',
+  HTU: 'Ho Technical University',
+  CCTU: 'Cape Coast Technical University',
+  BTU: 'Bolgatanga Technical University',
+  KoforiduaTU: 'Koforidua Technical University',
+  TamaleTU: 'Tamale Technical University',
+  STU: 'Sunyani Technical University',
+  REGENT: 'Regent University College of Science and Technology',
+  ASHESI: 'Ashesi University',
+  CENTRAL: 'Central University',
+  VVU: 'Valley View University',
+  PENTECOST: 'Pentecost University',
+  METHODIST: 'Methodist University College Ghana',
+  PRESBY: 'Presbyterian University College, Ghana',
+  CATHOLIC: 'Catholic University College of Ghana',
+  CSUC: 'Christian Service University College',
+  WISCONSIN: 'Wisconsin International University College, Ghana',
+  LANCASTER: 'Lancaster University Ghana',
+  ACADEMIC: 'Academic City University College',
+  RADFORD: 'Radford University College',
+};
+
 const ACRONYM_STOPWORDS = new Set(['of', 'for', 'and', 'the', 'in', 'at', 'on']);
 
 const toSearchKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const normalizeAbbreviationToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const toAcronym = (name: string) => {
   const words = toSearchKey(name)
@@ -57,13 +93,23 @@ const toAcronym = (name: string) => {
 const matchesUniversity = (universityName: string, rawQuery: string) => {
   const q = toSearchKey(rawQuery);
   if (!q) return true;
+  const normalizedQuery = normalizeAbbreviationToken(rawQuery);
 
   const nameKey = toSearchKey(universityName);
   if (nameKey.includes(q)) return true;
 
+  const abbreviationMatch = Object.entries(UNIVERSITY_ABBREVIATIONS).find(
+    ([abbr, name]) =>
+      name === universityName && normalizeAbbreviationToken(abbr) === normalizedQuery
+  );
+  if (abbreviationMatch) return true;
+
   const qCompact = q.replace(/\s+/g, '');
   const acronym = toAcronym(universityName);
   if (acronym.startsWith(qCompact)) return true;
+
+  const normalizedAcronym = normalizeAbbreviationToken(acronym);
+  if (normalizedAcronym.includes(normalizedQuery)) return true;
 
   return nameKey.split(' ').some((w) => w.startsWith(q));
 };
