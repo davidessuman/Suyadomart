@@ -5048,6 +5048,7 @@ const ProductDetailModal: React.FC<{
   const [loadingProductDetails, setLoadingProductDetails] = useState(false);
   const [colorSpecificMedia, setColorSpecificMedia] = useState<string[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [activeDetailsTab, setActiveDetailsTab] = useState<'description' | 'reviews'>('description');
   const sellerInfoRequestIdRef = useRef(0);
   const { width } = useWindowDimensions();
     // Update colorSpecificMedia when selectedColor or fullProductData changes
@@ -5180,6 +5181,7 @@ const ProductDetailModal: React.FC<{
       setCurrentMediaIndex(0);
       setSelectedColor('');
       setSelectedSize('');
+      setActiveDetailsTab('description');
       
       // Fetch current user ID for reviews section
       const fetchUserId = async () => {
@@ -5679,12 +5681,53 @@ const ProductDetailModal: React.FC<{
                   </View>
                 )}
                 
-                <Text style={[styles.modalSectionTitle, { color: theme.text, borderBottomColor: theme.border }]}>
-                  Product Description
-                </Text>
-                <Text style={[styles.modalDescription, { color: theme.textSecondary }]}>
-                  {displayProduct.description || displayProduct.title}
-                </Text>
+                <View style={[styles.detailsTabContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TouchableOpacity
+                    style={[
+                      styles.detailsTabButton,
+                      activeDetailsTab === 'description' && [styles.detailsTabButtonActive, { backgroundColor: theme.primary }],
+                    ]}
+                    onPress={() => setActiveDetailsTab('description')}
+                  >
+                    <Text
+                      style={[
+                        styles.detailsTabButtonText,
+                        { color: theme.textSecondary },
+                        activeDetailsTab === 'description' && styles.detailsTabButtonTextActive,
+                      ]}
+                    >
+                      Description
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.detailsTabButton,
+                      activeDetailsTab === 'reviews' && [styles.detailsTabButtonActive, { backgroundColor: theme.primary }],
+                    ]}
+                    onPress={() => setActiveDetailsTab('reviews')}
+                  >
+                    <Text
+                      style={[
+                        styles.detailsTabButtonText,
+                        { color: theme.textSecondary },
+                        activeDetailsTab === 'reviews' && styles.detailsTabButtonTextActive,
+                      ]}
+                    >
+                      Reviews
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {activeDetailsTab === 'description' ? (
+                  <>
+                    <Text style={[styles.modalSectionTitle, { color: theme.text, borderBottomColor: theme.border }]}>
+                      Product Description
+                    </Text>
+                    <Text style={[styles.modalDescription, { color: theme.textSecondary }]}>
+                      {displayProduct.description || displayProduct.title}
+                    </Text>
+                  </>
+                ) : null}
                 
                 {/* Seller Info */}
                 <View style={[styles.modalSellerInfo, { borderTopColor: theme.border }]}>
@@ -5703,7 +5746,7 @@ const ProductDetailModal: React.FC<{
                 </View>
                 
                 {/* Reviews Section - BEFORE Similar Products */}
-                {displayProduct.id && (
+                {activeDetailsTab === 'reviews' && displayProduct.id ? (
                   <ProductReviewsSection
                     productId={displayProduct.id}
                     currentUserId={currentUserId}
@@ -5711,7 +5754,7 @@ const ProductDetailModal: React.FC<{
                     showAlert={showAlert}
                     onRequireAuth={() => requireAuth('leave a review')}
                   />
-                )}
+                ) : null}
                 
                 {/* Similar Products Section */}
                 <SimilarProductsSection
@@ -9019,6 +9062,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   modalSectionTitle: { fontSize: 20, fontWeight: '700', marginTop: 15, marginBottom: 10, borderBottomWidth: 1, paddingBottom: 5 },
+  detailsTabContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 4,
+    gap: 8,
+    marginTop: 14,
+  },
+  detailsTabButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  detailsTabButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  detailsTabButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  detailsTabButtonTextActive: {
+    color: '#fff',
+  },
   modalDescription: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
   deliveryInfoContainer: {
     flexDirection: 'row',

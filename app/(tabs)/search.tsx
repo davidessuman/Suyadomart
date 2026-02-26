@@ -349,6 +349,37 @@ const getCardDisplayMedia = (mediaUrls: string[] | undefined): string | undefine
   return mediaUrls[0];
 };
 
+const matchesAdminStyleProductSearch = (product: Product, rawQuery: string) => {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+
+  const title = (product.title || '').toLowerCase();
+  const description = (product.description || '').toLowerCase();
+  const category = (product.category || '').toLowerCase();
+  const subCategory = (product.sub_category || '').toLowerCase();
+  const brand = (product.brand || '').toLowerCase();
+  const gender = (product.gender || '').toLowerCase();
+  const deliveryOption = (product.delivery_option || '').toLowerCase();
+  const colors = (product.colors_available || []).join(' ').toLowerCase();
+  const sizes = (product.sizes_available || []).join(' ').toLowerCase();
+  const quantity = String(product.quantity ?? '').toLowerCase();
+  const shopName = (product.display_name || '').toLowerCase();
+
+  return (
+    title.includes(query) ||
+    description.includes(query) ||
+    category.includes(query) ||
+    subCategory.includes(query) ||
+    brand.includes(query) ||
+    gender.includes(query) ||
+    deliveryOption.includes(query) ||
+    colors.includes(query) ||
+    sizes.includes(query) ||
+    quantity.includes(query) ||
+    shopName.includes(query)
+  );
+};
+
 // === CART MANAGER ===
 const useCart = (
   showAlert: (title: string, message: string, buttons?: AlertButton[]) => void,
@@ -2435,6 +2466,7 @@ const ProductDetailModal: React.FC<{
   const [selectedSize, setSelectedSize] = useState<string | undefined>(undefined);
   const [quantity, setQuantity] = useState(1);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [activeDetailsTab, setActiveDetailsTab] = useState<'description' | 'reviews'>('description');
   const colorScheme = useColorScheme();
 
   // Fetch current user ID
@@ -2460,6 +2492,7 @@ const ProductDetailModal: React.FC<{
       setSelectedColor(undefined);
       setSelectedSize(undefined);
       setQuantity(1);
+      setActiveDetailsTab('description');
     }
   }, [product?.id]);
 
@@ -2797,12 +2830,53 @@ const getAvailableStock = () => {
                 </View>
               </View>
 
-              <Text style={[styles.modalSectionTitle, { color: textColor, borderBottomColor: borderColor }]}>
-                Product Description
-              </Text>
-              <Text style={[styles.modalDescription, { color: isDark ? '#ccc' : '#666' }]}>
-                {product.description || product.title}
-              </Text>
+              <View style={[styles.detailsTabContainer, { backgroundColor: cardBackground, borderColor }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.detailsTabButton,
+                    activeDetailsTab === 'description' && [styles.detailsTabButtonActive, { backgroundColor: PRIMARY_COLOR }],
+                  ]}
+                  onPress={() => setActiveDetailsTab('description')}
+                >
+                  <Text
+                    style={[
+                      styles.detailsTabButtonText,
+                      { color: isDark ? '#bbb' : '#666' },
+                      activeDetailsTab === 'description' && styles.detailsTabButtonTextActive,
+                    ]}
+                  >
+                    Description
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.detailsTabButton,
+                    activeDetailsTab === 'reviews' && [styles.detailsTabButtonActive, { backgroundColor: PRIMARY_COLOR }],
+                  ]}
+                  onPress={() => setActiveDetailsTab('reviews')}
+                >
+                  <Text
+                    style={[
+                      styles.detailsTabButtonText,
+                      { color: isDark ? '#bbb' : '#666' },
+                      activeDetailsTab === 'reviews' && styles.detailsTabButtonTextActive,
+                    ]}
+                  >
+                    Reviews
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {activeDetailsTab === 'description' ? (
+                <>
+                  <Text style={[styles.modalSectionTitle, { color: textColor, borderBottomColor: borderColor }]}>
+                    Product Description
+                  </Text>
+                  <Text style={[styles.modalDescription, { color: isDark ? '#ccc' : '#666' }]}>
+                    {product.description || product.title}
+                  </Text>
+                </>
+              ) : null}
               
               <View style={[styles.modalSellerInfo, { borderTopColor: borderColor }]}>
                 <Image 
@@ -2819,7 +2893,7 @@ const getAvailableStock = () => {
               </View>
               
               {/* Reviews Section - BEFORE Similar Products */}
-              {product.id && (
+              {activeDetailsTab === 'reviews' && product.id ? (
                 <ProductReviewsSection
                   productId={product.id}
                   currentUserId={currentUserId}
@@ -2832,7 +2906,7 @@ const getAvailableStock = () => {
                   showAlert={showAlert}
                   onRequireAuth={() => requireAuth('leave a review')}
                 />
-              )}
+              ) : null}
               
               {/* Enhanced Similar Products Section */}
               <EnhancedSimilarProductsSection
@@ -4366,43 +4440,13 @@ export default function SearchScreen() {
         .from('products')
         .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit');
 
-      // Build conditions based on search parameters
-      const conditions = [];
-
-      if (params.productName) {
-        conditions.push(`title.ilike.%${params.productName}%`);
-      }
-
-      if (params.category) {
-        conditions.push(`category.ilike.%${params.category}%`);
-      }
-
-      if (params.shopName) {
-        // First, get shop IDs that match the shop name
-        const { data: shopsData } = await supabase
-          .from('shops')
-          .select('owner_id')
-          .ilike('name', `%${params.shopName}%`);
-
-        if (shopsData && shopsData.length > 0) {
-          const shopIds = shopsData.map(shop => shop.owner_id);
-          queryBuilder = queryBuilder.in('seller_id', shopIds);
-        } else {
-          // If no shops found, return empty results
-          setSections([]);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Apply text conditions if any
-      if (conditions.length > 0) {
-        queryBuilder = queryBuilder.or(conditions.join(','));
-      }
-
       // Apply category filter if selected
       if (selectedCategoryFilter) {
         queryBuilder = queryBuilder.eq('category', selectedCategoryFilter);
+      }
+
+      if (selectedSubCategoryFilter) {
+        queryBuilder = queryBuilder.eq('sub_category', selectedSubCategoryFilter);
       }
 
       queryBuilder = queryBuilder.order('created_at', { ascending: false }).limit(1000);
@@ -4411,6 +4455,9 @@ export default function SearchScreen() {
 
       if (data) {
         const enrichedProducts = await enrichProductsWithSellerInfo(data as any);
+        const productNameQuery = (params.productName || '').trim().toLowerCase();
+        const categoryQuery = (params.category || '').trim().toLowerCase();
+        const shopNameQuery = (params.shopName || '').trim().toLowerCase();
         
         // Filter by university for non-sellers
         let filteredProducts = enrichedProducts;
@@ -4424,6 +4471,25 @@ export default function SearchScreen() {
         if (isUserSeller && userId) {
           filteredProducts = enrichedProducts.filter(product => 
             product.seller_id === userId || product.university === userUniversity
+          );
+        }
+
+        if (productNameQuery) {
+          filteredProducts = filteredProducts.filter((product) =>
+            matchesAdminStyleProductSearch(product, productNameQuery)
+          );
+        }
+
+        if (categoryQuery) {
+          filteredProducts = filteredProducts.filter((product) =>
+            (product.category || '').toLowerCase().includes(categoryQuery) ||
+            (product.sub_category || '').toLowerCase().includes(categoryQuery)
+          );
+        }
+
+        if (shopNameQuery) {
+          filteredProducts = filteredProducts.filter((product) =>
+            (product.display_name || '').toLowerCase().includes(shopNameQuery)
           );
         }
         
@@ -4449,28 +4515,18 @@ export default function SearchScreen() {
     setLoading(true);
     
     try {
-      // First, get shop IDs that match the search text
-      const { data: shopsData } = await supabase
-        .from('shops')
-        .select('owner_id, name')
-        .ilike('name', `%${text}%`);
-
-      const shopIds = shopsData?.map(shop => shop.owner_id) || [];
-      
       let queryBuilder = supabase
         .from('products')
         .select('id, title, description, price, original_price, quantity, media_urls, category, brand, delivery_option, seller_id, created_at, sizes_available, colors_available, color_media, color_stock, size_stock, is_pre_order, pre_order_duration, pre_order_duration_unit')
-        .or(`title.ilike.%${text}%,category.ilike.%${text}%`)
         .order('created_at', { ascending: false })
         .limit(1000);
 
-      // If shop IDs were found, also search by seller_id
-      if (shopIds.length > 0) {
-        queryBuilder = queryBuilder.or(`seller_id.in.(${shopIds.join(',')})`);
-      }
-
       if (selectedCategoryFilter) {
         queryBuilder = queryBuilder.eq('category', selectedCategoryFilter);
+      }
+
+      if (selectedSubCategoryFilter) {
+        queryBuilder = queryBuilder.eq('sub_category', selectedSubCategoryFilter);
       }
 
       const { data } = await queryBuilder;
@@ -4492,6 +4548,10 @@ export default function SearchScreen() {
             product.seller_id === userId || product.university === userUniversity
           );
         }
+
+        filteredProducts = filteredProducts.filter((product) =>
+          matchesAdminStyleProductSearch(product, text)
+        );
         
         const grouped = groupByCategory(filteredProducts, selectedCategoryFilter);
         setSections(grouped);
@@ -5224,7 +5284,25 @@ export default function SearchScreen() {
               value={query}
               onChangeText={setQuery}
               onFocus={() => setShowSuggestions(true)}
-              style={[styles.searchInput, { color: textColor }]}
+              style={[
+                styles.searchInput,
+                { color: textColor },
+                Platform.OS === 'web'
+                  ? ({
+                      outlineWidth: 0,
+                      outlineStyle: 'none',
+                      boxShadow: 'none',
+                      WebkitAppearance: 'none',
+                      backgroundColor: 'transparent',
+                    } as any)
+                  : null,
+              ]}
+              underlineColorAndroid="transparent"
+              selectionColor={PRIMARY_COLOR}
+              cursorColor={PRIMARY_COLOR}
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
             />
             {isSearching && (
               <TouchableOpacity onPress={handleClearSearch} style={styles.clearSearchButton}>
@@ -5683,8 +5761,15 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    paddingVertical: 8,
+    lineHeight: 18,
+    height: 22,
+    paddingVertical: 0,
     paddingRight: 8,
+    paddingHorizontal: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   clearSearchButton: {
     padding: 4,
@@ -6427,6 +6512,37 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderBottomWidth: 1,
     paddingBottom: 5,
+  },
+  detailsTabContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 4,
+    gap: 8,
+    marginTop: 14,
+  },
+  detailsTabButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  detailsTabButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  detailsTabButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  detailsTabButtonTextActive: {
+    color: '#fff',
   },
   modalDescription: {
     fontSize: 16,

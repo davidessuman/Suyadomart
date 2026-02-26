@@ -395,4 +395,3 @@ const styles2 = StyleSheet.create({
     borderRadius: 9999,
   },
 });
-

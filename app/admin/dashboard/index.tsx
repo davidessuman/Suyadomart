@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import AdminProfile from '../Profiles/AdminProfile';
 import UserDetailsModal from './users/UserDetailsModal';
+import AdminProductsPage from './products';
 
 const TAB_ACTIVE_COLOR = '#2563EB';
 
@@ -872,6 +873,8 @@ const AdminDashboard = () => {
         <View style={styles.mainContent}>
           {activeTab === 'Users' ? (
             <UsersPanel />
+          ) : activeTab === 'Products' ? (
+            <AdminProductsPage enableHorizontalScroll />
           ) : (
             <>
               <Text style={styles.sectionTitle}>{activeTab}</Text>

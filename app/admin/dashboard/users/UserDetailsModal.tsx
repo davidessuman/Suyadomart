@@ -185,6 +185,13 @@ const UserDetailsModal = ({ visible, user, onClose }: UserDetailsModalProps) => 
           {/* Footer */}
           <View style={styles.footer}>
             <View style={styles.footerButtonsRow}>
+              {isSeller ? (
+                <TouchableOpacity style={styles.viewShopButton} onPress={() => {}} activeOpacity={0.88}>
+                  <Ionicons name="storefront-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.viewShopButtonText}>View Shop</Text>
+                </TouchableOpacity>
+              ) : null}
+
               <TouchableOpacity style={styles.modifyButton} onPress={() => {}} activeOpacity={0.88}>
                 <Ionicons name="create-outline" size={18} color="#FFFFFF" />
                 <Text style={styles.modifyButtonText}>Modify</Text>
@@ -436,6 +443,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 3,
+  },
+  viewShopButton: {
+    flex: 1,
+    maxWidth: 220,
+    minHeight: 46,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#0F766E',
+    borderWidth: 1,
+    borderColor: '#0D5F59',
+    shadowColor: '#0D5F59',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  viewShopButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   modifyButtonText: {
     color: '#FFFFFF',
