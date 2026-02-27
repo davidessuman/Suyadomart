@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import AdminProfile from '../Profiles/AdminProfile';
 import UserDetailsModal from './users/UserDetailsModal';
+import SellerShopModal from './users/SellerShopModal';
 import AdminProductsPage from './products';
 
 const TAB_ACTIVE_COLOR = '#2563EB';
@@ -89,6 +90,7 @@ type UserProfile = {
   created_at: string;
   shop_name?: string | null;
   shop_phone?: string | null;
+  orders_count?: number;
 };
 
 const UsersPanel = () => {
@@ -102,8 +104,12 @@ const UsersPanel = () => {
   const [universitySearchTerm, setUniversitySearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
+  const [selectedSellerForShop, setSelectedSellerForShop] = useState<UserProfile | null>(null);
+  const [showSellerShop, setShowSellerShop] = useState(false);
   const [searchColumn, setSearchColumn] = useState<'name' | 'username' | 'email' | 'shop_name' | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSellerOrderFilter, setSelectedSellerOrderFilter] = useState<'all' | 'with_orders' | 'without_orders'>('all');
+  const [showOrderFilterDropdown, setShowOrderFilterDropdown] = useState(false);
 
   const universityOptions = Array.from(
     new Set(users.map((user) => user.university?.trim()).filter((value): value is string => Boolean(value)))
@@ -148,6 +154,14 @@ const UsersPanel = () => {
 
     if (selectedRole === 'seller') {
       if (!user.is_seller) return false;
+
+      if (selectedSellerOrderFilter === 'with_orders' && (user.orders_count ?? 0) <= 0) {
+        return false;
+      }
+
+      if (selectedSellerOrderFilter === 'without_orders' && (user.orders_count ?? 0) > 0) {
+        return false;
+      }
     } else if (selectedRole === 'buyer') {
       if (user.is_seller) return false;
     }
@@ -216,13 +230,56 @@ const UsersPanel = () => {
           .select('owner_id, name, phone')
           .in('owner_id', sellerIds);
 
+        const sellerOrderCounts = await Promise.all(
+          sellerIds.map(async (sellerId) => {
+            const { data: sellerOrderRows, error: sellerOrdersError } = await supabase.rpc('admin_get_seller_orders', {
+              p_seller_id: sellerId,
+            });
+
+            if (!sellerOrdersError) {
+              return { sellerId, count: (sellerOrderRows || []).length };
+            }
+
+            const [{ data: directOrders }, { data: directOrderItems }] = await Promise.all([
+              supabase.from('orders').select('id').eq('seller_id', sellerId),
+              supabase.from('order_items').select('order_id').eq('seller_id', sellerId),
+            ]);
+
+            const orderIds = new Set<string>();
+            (directOrders || []).forEach((order: { id: string | null }) => {
+              if (order.id) orderIds.add(order.id);
+            });
+            (directOrderItems || []).forEach((item: { order_id: string | null }) => {
+              if (item.order_id) orderIds.add(item.order_id);
+            });
+
+            return { sellerId, count: orderIds.size };
+          })
+        );
+
+        const orderCountBySeller = new Map<string, number>(
+          sellerOrderCounts.map(({ sellerId, count }) => [sellerId, count])
+        );
+
         if (!shopsError && shopsData) {
           const shopsMap = new Map(shopsData.map((shop) => [shop.owner_id, { name: shop.name, phone: shop.phone }]));
 
           const enrichedUsers = usersData.map((user) => {
             if (user.is_seller && shopsMap.has(user.id)) {
               const shop = shopsMap.get(user.id)!;
-              return { ...user, shop_name: shop.name, shop_phone: shop.phone };
+              return {
+                ...user,
+                shop_name: shop.name,
+                shop_phone: shop.phone,
+                orders_count: orderCountBySeller.get(user.id) || 0,
+              };
+            }
+
+            if (user.is_seller) {
+              return {
+                ...user,
+                orders_count: orderCountBySeller.get(user.id) || 0,
+              };
             }
 
             return user;
@@ -230,7 +287,14 @@ const UsersPanel = () => {
 
           setUsers(enrichedUsers);
         } else {
-          setUsers(usersData);
+          const enrichedUsers = usersData.map((user) => {
+            if (!user.is_seller) return user;
+            return {
+              ...user,
+              orders_count: orderCountBySeller.get(user.id) || 0,
+            };
+          });
+          setUsers(enrichedUsers);
         }
       } else {
         setUsers(usersData);
@@ -283,6 +347,23 @@ const UsersPanel = () => {
                 {item.shop_phone || '-'}
               </Text>
             </View>
+            <View
+              style={[
+                styles.panelColOrdersCell,
+                styles.panelColumnContainer,
+                (item.orders_count ?? 0) > 0 && styles.panelColOrdersCellHighlighted,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.panelTableCellText,
+                  (item.orders_count ?? 0) > 0 && styles.panelColOrdersCellTextHighlighted,
+                ]}
+                numberOfLines={1}
+              >
+                {item.orders_count ?? 0}
+              </Text>
+            </View>
           </>
         ) : (
           <>
@@ -325,7 +406,10 @@ const UsersPanel = () => {
               styles.panelFilterSegment,
               selectedRole === 'seller' && styles.panelFilterSegmentActive,
             ]}
-            onPress={() => setSelectedRole('seller')}
+            onPress={() => {
+              setSelectedRole('seller');
+              setShowOrderFilterDropdown(false);
+            }}
           >
             <Text
               style={[
@@ -346,6 +430,7 @@ const UsersPanel = () => {
             onPress={() => {
               const nextRole: 'buyer' = 'buyer';
               setSelectedRole(nextRole);
+              setShowOrderFilterDropdown(false);
 
               if (nextRole === 'buyer' && searchColumn === 'name') {
                 setSearchColumn(null);
@@ -387,6 +472,7 @@ const UsersPanel = () => {
               color={showUniversityDropdown ? '#1D4ED8' : '#475569'}
             />
           </TouchableOpacity>
+
         </View>
 
         <View style={styles.panelRoleCountChip}>
@@ -597,6 +683,13 @@ const UsersPanel = () => {
                   )}
                 </View>
                 <Text style={[styles.panelTableHeaderText, styles.panelColShopPhone]}>Phone Number</Text>
+                <TouchableOpacity
+                  style={[styles.panelColOrdersHeader, showOrderFilterDropdown && styles.panelColOrdersHeaderActive]}
+                  onPress={() => setShowOrderFilterDropdown((prev) => !prev)}
+                >
+                  <Text style={[styles.panelTableHeaderText, styles.panelColOrdersText]}>Orders</Text>
+                  <Ionicons name={showOrderFilterDropdown ? 'chevron-up' : 'chevron-down'} size={12} color="#FFFFFF" />
+                </TouchableOpacity>
               </>
             ) : (
               <>
@@ -709,6 +802,72 @@ const UsersPanel = () => {
             )}
           </View>
 
+          {showOrderFilterDropdown && selectedRole === 'seller' ? (
+            <View style={styles.panelTableOrderDropdownWrap}>
+              <View style={styles.panelOrderDropdownMenu}>
+                <TouchableOpacity
+                  style={[
+                    styles.panelOrderDropdownOption,
+                    selectedSellerOrderFilter === 'all' && styles.panelOrderDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedSellerOrderFilter('all');
+                    setShowOrderFilterDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.panelOrderDropdownOptionText,
+                      selectedSellerOrderFilter === 'all' && styles.panelOrderDropdownOptionTextActive,
+                    ]}
+                  >
+                    All Sellers
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.panelOrderDropdownOption,
+                    selectedSellerOrderFilter === 'with_orders' && styles.panelOrderDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedSellerOrderFilter('with_orders');
+                    setShowOrderFilterDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.panelOrderDropdownOptionText,
+                      selectedSellerOrderFilter === 'with_orders' && styles.panelOrderDropdownOptionTextActive,
+                    ]}
+                  >
+                    Sellers With Orders
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.panelOrderDropdownOption,
+                    selectedSellerOrderFilter === 'without_orders' && styles.panelOrderDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedSellerOrderFilter('without_orders');
+                    setShowOrderFilterDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.panelOrderDropdownOptionText,
+                      selectedSellerOrderFilter === 'without_orders' && styles.panelOrderDropdownOptionTextActive,
+                    ]}
+                  >
+                    Sellers Without Orders
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           <FlatList
             style={styles.panelList}
             data={filteredUsers}
@@ -725,7 +884,24 @@ const UsersPanel = () => {
         </View>
       )}
 
-      <UserDetailsModal visible={showUserDetails} user={selectedUser} onClose={() => setShowUserDetails(false)} />
+      <UserDetailsModal
+        visible={showUserDetails}
+        user={selectedUser}
+        onClose={() => setShowUserDetails(false)}
+        onViewShop={(seller) => {
+          setSelectedSellerForShop(seller);
+          setShowSellerShop(true);
+        }}
+      />
+
+      <SellerShopModal
+        visible={showSellerShop}
+        seller={selectedSellerForShop}
+        onClose={() => {
+          setShowSellerShop(false);
+          setSelectedSellerForShop(null);
+        }}
+      />
     </View>
   );
 };
@@ -1254,6 +1430,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
+  panelFilterSegmentOrders: {
+    minWidth: 170,
+    borderLeftWidth: 1,
+    borderLeftColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   panelFilterSegmentActive: {
     backgroundColor: '#EFF6FF',
   },
@@ -1290,6 +1475,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   panelUniversityDropdownTriggerText: {
+    flex: 1,
+  },
+  panelOrderDropdownTriggerText: {
     flex: 1,
   },
   panelUniversityDropdownMenu: {
@@ -1344,6 +1532,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1D4ED8',
   },
+  panelOrderDropdownMenu: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    maxWidth: 260,
+  },
+  panelTableOrderDropdownWrap: {
+    alignItems: 'flex-end',
+    paddingRight: 18,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  panelOrderDropdownOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F4F8',
+  },
+  panelOrderDropdownOptionActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  panelOrderDropdownOptionText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  panelOrderDropdownOptionTextActive: {
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
   panelTableRowWithShop: {
     paddingHorizontal: 12,
   },
@@ -1352,6 +1578,37 @@ const styles = StyleSheet.create({
   },
   panelColShopPhone: {
     flex: 1.2,
+  },
+  panelColOrdersHeader: {
+    flex: 0.8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  panelColOrdersHeaderActive: {
+    opacity: 0.9,
+  },
+  panelColOrdersCell: {
+    flex: 0.8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  panelColOrdersCellHighlighted: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 8,
+    borderColor: '#86EFAC',
+    borderWidth: 1,
+    paddingVertical: 4,
+    marginVertical: 2,
+  },
+  panelColOrdersCellTextHighlighted: {
+    color: '#166534',
+    fontWeight: '700',
+  },
+  panelColOrdersText: {
+    flex: 0.8,
+    textAlign: 'center',
   },
   panelColumnHeaderContainer: {
     flexDirection: 'row',

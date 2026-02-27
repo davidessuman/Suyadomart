@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Te
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import UserDetailsModal from './UserDetailsModal';
+import SellerShopModal from './SellerShopModal';
 
 type UserProfile = {
   id: string;
@@ -14,6 +15,7 @@ type UserProfile = {
   created_at: string;
   shop_name?: string | null;
   shop_phone?: string | null;
+  orders_count?: number;
 };
 
 const AdminUsersDashboard = () => {
@@ -26,8 +28,12 @@ const AdminUsersDashboard = () => {
   const [showUniversityDropdown, setShowUniversityDropdown] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
+  const [selectedSellerForShop, setSelectedSellerForShop] = useState<UserProfile | null>(null);
+  const [showSellerShop, setShowSellerShop] = useState(false);
   const [searchColumn, setSearchColumn] = useState<'name' | 'username' | 'email' | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSellerOrderFilter, setSelectedSellerOrderFilter] = useState<'all' | 'with_orders' | 'without_orders'>('all');
+  const [showOrderFilterDropdown, setShowOrderFilterDropdown] = useState(false);
 
   const universityOptions = Array.from(
     new Set(users.map((user) => user.university?.trim()).filter((value): value is string => Boolean(value)))
@@ -42,6 +48,14 @@ const AdminUsersDashboard = () => {
 
     if (selectedRole === 'seller') {
       if (!user.is_seller) return false;
+
+      if (selectedSellerOrderFilter === 'with_orders' && (user.orders_count ?? 0) <= 0) {
+        return false;
+      }
+
+      if (selectedSellerOrderFilter === 'without_orders' && (user.orders_count ?? 0) > 0) {
+        return false;
+      }
     } else if (selectedRole === 'buyer') {
       if (user.is_seller) return false;
     }
@@ -75,7 +89,7 @@ const AdminUsersDashboard = () => {
 
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('id, full_name, username, email, university, is_seller, created_at, avatar_url')
+      .select('id, full_name, username, email, university, is_seller, created_at, avatar_url, is_active')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -93,13 +107,56 @@ const AdminUsersDashboard = () => {
           .select('owner_id, name, phone')
           .in('owner_id', sellerIds);
 
+        const sellerOrderCounts = await Promise.all(
+          sellerIds.map(async (sellerId) => {
+            const { data: sellerOrderRows, error: sellerOrdersError } = await supabase.rpc('admin_get_seller_orders', {
+              p_seller_id: sellerId,
+            });
+
+            if (!sellerOrdersError) {
+              return { sellerId, count: (sellerOrderRows || []).length };
+            }
+
+            const [{ data: directOrders }, { data: directOrderItems }] = await Promise.all([
+              supabase.from('orders').select('id').eq('seller_id', sellerId),
+              supabase.from('order_items').select('order_id').eq('seller_id', sellerId),
+            ]);
+
+            const orderIds = new Set<string>();
+            (directOrders || []).forEach((order: { id: string | null }) => {
+              if (order.id) orderIds.add(order.id);
+            });
+            (directOrderItems || []).forEach((item: { order_id: string | null }) => {
+              if (item.order_id) orderIds.add(item.order_id);
+            });
+
+            return { sellerId, count: orderIds.size };
+          })
+        );
+
+        const orderCountBySeller = new Map<string, number>(
+          sellerOrderCounts.map(({ sellerId, count }) => [sellerId, count])
+        );
+
         if (!shopsError && shopsData) {
           const shopsMap = new Map(shopsData.map((shop) => [shop.owner_id, { name: shop.name, phone: shop.phone }]));
 
           const enrichedUsers = usersData.map((user) => {
             if (user.is_seller && shopsMap.has(user.id)) {
               const shop = shopsMap.get(user.id)!;
-              return { ...user, shop_name: shop.name, shop_phone: shop.phone };
+              return {
+                ...user,
+                shop_name: shop.name,
+                shop_phone: shop.phone,
+                orders_count: orderCountBySeller.get(user.id) || 0,
+              };
+            }
+
+            if (user.is_seller) {
+              return {
+                ...user,
+                orders_count: orderCountBySeller.get(user.id) || 0,
+              };
             }
 
             return user;
@@ -107,7 +164,14 @@ const AdminUsersDashboard = () => {
 
           setUsers(enrichedUsers);
         } else {
-          setUsers(usersData);
+          const enrichedUsers = usersData.map((user) => {
+            if (!user.is_seller) return user;
+            return {
+              ...user,
+              orders_count: orderCountBySeller.get(user.id) || 0,
+            };
+          });
+          setUsers(enrichedUsers);
         }
       } else {
         setUsers(usersData);
@@ -174,6 +238,23 @@ const AdminUsersDashboard = () => {
                 {item.shop_phone || '-'}
               </Text>
             </View>
+            <View
+              style={[
+                styles.colOrdersCell,
+                styles.columnContainer,
+                (item.orders_count ?? 0) > 0 && styles.colOrdersCellHighlighted,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tableCellText,
+                  (item.orders_count ?? 0) > 0 && styles.colOrdersCellTextHighlighted,
+                ]}
+                numberOfLines={1}
+              >
+                {item.orders_count ?? 0}
+              </Text>
+            </View>
           </>
         )}
       </TouchableOpacity>
@@ -193,7 +274,11 @@ const AdminUsersDashboard = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterButton, selectedRole === 'seller' && styles.filterButtonActive]}
-          onPress={() => setSelectedRole((prev) => (prev === 'seller' ? null : 'seller'))}
+          onPress={() => {
+            setSelectedRole((prev) => (prev === 'seller' ? null : 'seller'));
+            setShowUniversityDropdown(false);
+            setShowOrderFilterDropdown(false);
+          }}
         >
           <Text style={[styles.filterButtonText, selectedRole === 'seller' && styles.filterButtonTextActive]}>
             Sellers
@@ -201,7 +286,11 @@ const AdminUsersDashboard = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterButton, selectedRole === 'buyer' && styles.filterButtonActive]}
-          onPress={() => setSelectedRole((prev) => (prev === 'buyer' ? null : 'buyer'))}
+          onPress={() => {
+            setSelectedRole((prev) => (prev === 'buyer' ? null : 'buyer'));
+            setShowUniversityDropdown(false);
+            setShowOrderFilterDropdown(false);
+          }}
         >
           <Text style={[styles.filterButtonText, selectedRole === 'buyer' && styles.filterButtonTextActive]}>
             Buyers
@@ -210,7 +299,10 @@ const AdminUsersDashboard = () => {
 
         <TouchableOpacity
           style={[styles.filterButton, styles.universityDropdownTrigger, showUniversityDropdown && styles.filterButtonActive]}
-          onPress={() => setShowUniversityDropdown((prev) => !prev)}
+          onPress={() => {
+            setShowUniversityDropdown((prev) => !prev);
+            setShowOrderFilterDropdown(false);
+          }}
         >
           <Text
             style={[styles.filterButtonText, styles.universityDropdownTriggerText, showUniversityDropdown && styles.filterButtonTextActive]}
@@ -220,6 +312,7 @@ const AdminUsersDashboard = () => {
           </Text>
           <Ionicons name={showUniversityDropdown ? 'chevron-up' : 'chevron-down'} size={14} color="#475569" />
         </TouchableOpacity>
+
       </View>
 
       {showUniversityDropdown ? (
@@ -389,9 +482,82 @@ const AdminUsersDashboard = () => {
               <>
                 <Text style={[styles.tableHeaderText, styles.colShopName]}>Shop Name</Text>
                 <Text style={[styles.tableHeaderText, styles.colShopPhone]}>Shop Phone</Text>
+                <TouchableOpacity
+                  style={[styles.colOrdersHeader, showOrderFilterDropdown && styles.colOrdersHeaderActive]}
+                  onPress={() => setShowOrderFilterDropdown((prev) => !prev)}
+                >
+                  <Text style={[styles.tableHeaderText, styles.colOrdersText]}>Orders</Text>
+                  <Ionicons name={showOrderFilterDropdown ? 'chevron-up' : 'chevron-down'} size={12} color="#FFFFFF" />
+                </TouchableOpacity>
               </>
             )}
           </View>
+
+          {showOrderFilterDropdown && selectedRole === 'seller' ? (
+            <View style={styles.tableOrderDropdownWrap}>
+              <View style={styles.orderDropdownMenu}>
+                <TouchableOpacity
+                  style={[
+                    styles.orderDropdownOption,
+                    selectedSellerOrderFilter === 'all' && styles.orderDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedSellerOrderFilter('all');
+                    setShowOrderFilterDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.orderDropdownOptionText,
+                      selectedSellerOrderFilter === 'all' && styles.orderDropdownOptionTextActive,
+                    ]}
+                  >
+                    All Sellers
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.orderDropdownOption,
+                    selectedSellerOrderFilter === 'with_orders' && styles.orderDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedSellerOrderFilter('with_orders');
+                    setShowOrderFilterDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.orderDropdownOptionText,
+                      selectedSellerOrderFilter === 'with_orders' && styles.orderDropdownOptionTextActive,
+                    ]}
+                  >
+                    Sellers With Orders
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.orderDropdownOption,
+                    selectedSellerOrderFilter === 'without_orders' && styles.orderDropdownOptionActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedSellerOrderFilter('without_orders');
+                    setShowOrderFilterDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.orderDropdownOptionText,
+                      selectedSellerOrderFilter === 'without_orders' && styles.orderDropdownOptionTextActive,
+                    ]}
+                  >
+                    Sellers Without Orders
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           <FlatList
             style={styles.list}
@@ -409,7 +575,24 @@ const AdminUsersDashboard = () => {
         </View>
       )}
 
-      <UserDetailsModal visible={showUserDetails} user={selectedUser} onClose={() => setShowUserDetails(false)} />
+      <UserDetailsModal
+        visible={showUserDetails}
+        user={selectedUser}
+        onClose={() => setShowUserDetails(false)}
+        onViewShop={(seller) => {
+          setSelectedSellerForShop(seller);
+          setShowSellerShop(true);
+        }}
+      />
+
+      <SellerShopModal
+        visible={showSellerShop}
+        seller={selectedSellerForShop}
+        onClose={() => {
+          setShowSellerShop(false);
+          setSelectedSellerForShop(null);
+        }}
+      />
     </View>
   );
 };
@@ -569,6 +752,16 @@ const styles = StyleSheet.create({
   universityDropdownTriggerText: {
     flex: 1,
   },
+  orderDropdownTrigger: {
+    minWidth: 170,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  orderDropdownTriggerText: {
+    flex: 1,
+  },
   universityDropdownMenu: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
@@ -604,6 +797,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1D4ED8',
   },
+  orderDropdownMenu: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    maxWidth: 260,
+  },
+  tableOrderDropdownWrap: {
+    alignItems: 'flex-end',
+    paddingRight: 18,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  orderDropdownOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F4F8',
+  },
+  orderDropdownOptionActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  orderDropdownOptionText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  orderDropdownOptionTextActive: {
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
   tableRowWithShop: {
     paddingHorizontal: 12,
   },
@@ -612,6 +843,37 @@ const styles = StyleSheet.create({
   },
   colShopPhone: {
     flex: 1.2,
+  },
+  colOrdersHeader: {
+    flex: 0.8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  colOrdersHeaderActive: {
+    opacity: 0.9,
+  },
+  colOrdersCell: {
+    flex: 0.8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colOrdersCellHighlighted: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 8,
+    borderColor: '#86EFAC',
+    borderWidth: 1,
+    paddingVertical: 4,
+    marginVertical: 2,
+  },
+  colOrdersCellTextHighlighted: {
+    color: '#166534',
+    fontWeight: '700',
+  },
+  colOrdersText: {
+    flex: 0.8,
+    textAlign: 'center',
   },
   columnHeaderContainer: {
     flexDirection: 'row',

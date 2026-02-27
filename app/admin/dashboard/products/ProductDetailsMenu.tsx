@@ -40,6 +40,7 @@ type ProductDetailsMenuProps = {
   product: AdminDashboardProduct | null;
   onClose: () => void;
   onEdit?: (product: AdminDashboardProduct) => void;
+  onViewShop?: (product: AdminDashboardProduct) => void;
 };
 
 const getPublicMediaUrl = (url?: string) => {
@@ -66,7 +67,7 @@ const isVideoUrl = (url?: string) => {
   return value.includes('.mp4') || value.includes('.mov') || value.includes('.avi') || value.includes('.webm') || value.includes('.mkv');
 };
 
-const ProductDetailsMenu = ({ visible, product, onClose, onEdit }: ProductDetailsMenuProps) => {
+const ProductDetailsMenu = ({ visible, product, onClose, onEdit, onViewShop }: ProductDetailsMenuProps) => {
   const { width } = useWindowDimensions();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<'description' | 'productInfo'>('description');
@@ -412,6 +413,22 @@ const ProductDetailsMenu = ({ visible, product, onClose, onEdit }: ProductDetail
               </View>
             ) : null}
           </ScrollView>
+
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.viewShopButton, !product.seller_id && styles.viewShopButtonDisabled]}
+              activeOpacity={0.88}
+              disabled={!product.seller_id}
+              onPress={() => {
+                if (!product.seller_id) return;
+                onClose();
+                onViewShop?.(product);
+              }}
+            >
+              <Ionicons name="storefront-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.viewShopButtonText}>View Shop</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -865,6 +882,43 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 12,
     fontWeight: '600',
+  },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  viewShopButton: {
+    flex: 1,
+    maxWidth: 220,
+    minHeight: 46,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    alignSelf: 'center',
+    backgroundColor: '#0F766E',
+    borderWidth: 1,
+    borderColor: '#0D5F59',
+    shadowColor: '#0D5F59',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  viewShopButtonDisabled: {
+    opacity: 0.5,
+  },
+  viewShopButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });
 

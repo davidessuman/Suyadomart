@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+// Make sure ModifyUserMenu.tsx exists in the same folder, or update the path if it's elsewhere
 import { Ionicons } from '@expo/vector-icons';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
@@ -21,9 +22,11 @@ interface UserDetailsModalProps {
   visible: boolean;
   user: UserProfile | null;
   onClose: () => void;
+  onViewShop?: (user: UserProfile) => void;
 }
 
-const UserDetailsModal = ({ visible, user, onClose }: UserDetailsModalProps) => {
+
+const UserDetailsModal = ({ visible, user, onClose, onViewShop }: UserDetailsModalProps) => {
   if (!user) return null;
 
   const formatDate = (dateString: string) => {
@@ -33,13 +36,19 @@ const UserDetailsModal = ({ visible, user, onClose }: UserDetailsModalProps) => 
 
   const getAvatarUrl = (avatarUrl: string | null | undefined) => {
     if (!avatarUrl) return null;
-    if (avatarUrl.startsWith('http')) return avatarUrl;
     return `${SUPABASE_URL}/storage/v1/object/public/avatars/${avatarUrl}`;
   };
 
   const displayName = user.full_name || user.username || user.email || 'Unnamed user';
   const isSeller = Boolean(user.is_seller);
   const avatarUrl = getAvatarUrl(user.avatar_url);
+
+  const handleViewShop = () => {
+    if (!isSeller) return;
+
+    onClose();
+    onViewShop?.(user);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -186,16 +195,11 @@ const UserDetailsModal = ({ visible, user, onClose }: UserDetailsModalProps) => 
           <View style={styles.footer}>
             <View style={styles.footerButtonsRow}>
               {isSeller ? (
-                <TouchableOpacity style={styles.viewShopButton} onPress={() => {}} activeOpacity={0.88}>
+                <TouchableOpacity style={styles.viewShopButton} onPress={handleViewShop} activeOpacity={0.88}>
                   <Ionicons name="storefront-outline" size={18} color="#FFFFFF" />
                   <Text style={styles.viewShopButtonText}>View Shop</Text>
                 </TouchableOpacity>
               ) : null}
-
-              <TouchableOpacity style={styles.modifyButton} onPress={() => {}} activeOpacity={0.88}>
-                <Ionicons name="create-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.modifyButtonText}>Modify</Text>
-              </TouchableOpacity>
 
               <TouchableOpacity style={styles.closeButton} onPress={onClose} activeOpacity={0.88}>
                 <Ionicons name="close-circle" size={18} color="#FFFFFF" />

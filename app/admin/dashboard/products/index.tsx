@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import ProductDetailsMenu, { AdminDashboardProduct } from './ProductDetailsMenu';
 import EditProductMenu from './EditProductMenu';
+import SellerShopModal from '../users/SellerShopModal';
 
 const SUPABASE_URL = 'https://qwujadyqebfypyhfuwfl.supabase.co';
 const GRID_GAP = 12;
@@ -207,6 +208,14 @@ type AdminProductsPageProps = {
   enableHorizontalScroll?: boolean;
 };
 
+type SellerUser = {
+  id: string;
+  full_name: string | null;
+  username: string | null;
+  email: string | null;
+  shop_name?: string | null;
+};
+
 const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPageProps) => {
   const { width: windowWidth } = useWindowDimensions();
   const [containerWidth, setContainerWidth] = useState(0);
@@ -227,6 +236,8 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
   const [isProductSearchFocused, setIsProductSearchFocused] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<AdminDashboardProduct | null>(null);
+  const [selectedSellerForShop, setSelectedSellerForShop] = useState<SellerUser | null>(null);
+  const [showSellerShop, setShowSellerShop] = useState(false);
 
   const availableWidth = useMemo(() => {
     const measured = containerWidth > 0 ? containerWidth : windowWidth;
@@ -823,6 +834,18 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
         visible={detailsVisible}
         product={selectedProduct}
         onEdit={openEditModal}
+        onViewShop={(product) => {
+          if (!product.seller_id) return;
+
+          setSelectedSellerForShop({
+            id: product.seller_id,
+            full_name: product.display_name || null,
+            username: product.display_name || null,
+            email: null,
+            shop_name: product.shop_name || null,
+          });
+          setShowSellerShop(true);
+        }}
         onClose={() => {
           setDetailsVisible(false);
           setSelectedProduct(null);
@@ -847,6 +870,15 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
           setEditVisible(false);
           setEditingProduct(null);
           setDetailsVisible(false);
+        }}
+      />
+
+      <SellerShopModal
+        visible={showSellerShop}
+        seller={selectedSellerForShop}
+        onClose={() => {
+          setShowSellerShop(false);
+          setSelectedSellerForShop(null);
         }}
       />
     </View>
