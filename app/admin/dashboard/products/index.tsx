@@ -214,6 +214,7 @@ type SellerUser = {
   username: string | null;
   email: string | null;
   shop_name?: string | null;
+  shop_phone?: string | null;
 };
 
 const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPageProps) => {
@@ -537,11 +538,52 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
   return (
     <View style={styles.container} onLayout={handleContainerLayout}>
       <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.universityFilterWrap}>
-            <View style={styles.universityFilterRow}>
+        <View
+          style={{
+            marginBottom: 4,
+            marginTop: 0,
+            alignItems: windowWidth < 700 ? 'flex-start' : 'center',
+            width: '100%',
+          }}
+        >
+          <Text
+            style={{
+              fontSize: windowWidth < 700 ? 13 : 15,
+              fontWeight: 700,
+              color: '#183B56',
+              textAlign: windowWidth < 700 ? 'left' : 'center',
+              letterSpacing: 0.05,
+              textTransform: 'uppercase',
+              width: '100%',
+            }}
+          >
+            {selectedUniversity || 'All Universities'}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.headerTopRow,
+            windowWidth < 700 && { flexDirection: 'column', alignItems: 'stretch', gap: 10 },
+          ]}
+        >
+          <View
+            style={[
+              styles.universityFilterWrap,
+              windowWidth < 700 && { maxWidth: '100%', position: 'relative', zIndex: 50, elevation: 10 },
+            ]}
+          >
+            <View
+              style={[
+                styles.universityFilterRow,
+                windowWidth < 700 && { flexWrap: 'wrap', gap: 8 },
+              ]}
+            >
+
               <TouchableOpacity
-                style={styles.categoryButton}
+                style={[
+                  styles.categoryButton,
+                  windowWidth < 700 && { flex: 1, minWidth: 0 },
+                ]}
                 activeOpacity={0.88}
                 onPress={() => {
                   setShowCategoryDropdown((prev) => !prev);
@@ -552,14 +594,27 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
                 }}
               >
                 <Ionicons name="pricetag-outline" size={14} color="#1D4ED8" />
-                <Text numberOfLines={1} style={styles.categoryButtonText}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.categoryButtonText,
+                    { flexShrink: 1, minWidth: 0 },
+                    windowWidth < 400 && { fontSize: 11 },
+                    windowWidth >= 400 && windowWidth < 700 && { fontSize: 12 },
+                    windowWidth >= 700 && { fontSize: 13 },
+                  ]}
+                >
                   {selectedSubCategory || selectedCategory || 'All Categories'}
                 </Text>
                 <Ionicons name={showCategoryDropdown ? 'chevron-up' : 'chevron-down'} size={14} color="#1D4ED8" />
               </TouchableOpacity>
 
+
               <TouchableOpacity
-                style={styles.universityButton}
+                style={[
+                  styles.universityButton,
+                  windowWidth < 700 && { flex: 1, minWidth: 0 },
+                ]}
                 activeOpacity={0.88}
                 onPress={() => {
                   setShowUniversityDropdown((prev) => !prev);
@@ -570,13 +625,27 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
                 }}
               >
                 <Ionicons name="school-outline" size={14} color="#1D4ED8" />
-                <Text numberOfLines={1} style={styles.universityButtonText}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.universityButtonText,
+                    { flexShrink: 1, minWidth: 0 },
+                    windowWidth < 400 && { fontSize: 11 },
+                    windowWidth >= 400 && windowWidth < 700 && { fontSize: 12 },
+                    windowWidth >= 700 && { fontSize: 13 },
+                  ]}
+                >
                   {selectedUniversity || 'University'}
                 </Text>
                 <Ionicons name={showUniversityDropdown ? 'chevron-up' : 'chevron-down'} size={14} color="#1D4ED8" />
               </TouchableOpacity>
 
-              <View style={styles.selectedCountBadge}>
+              <View
+                style={[
+                  styles.selectedCountBadge,
+                  windowWidth < 700 && { minWidth: 60, paddingHorizontal: 8 },
+                ]}
+              >
                 <View style={styles.selectedCountTopRow}>
                   <Ionicons name="cube-outline" size={12} color="#1D4ED8" />
                   <Text style={styles.selectedCountLabel}>Products</Text>
@@ -687,7 +756,20 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
             ) : null}
 
             {showUniversityDropdown ? (
-              <View style={styles.universityDropdown}>
+              <View
+                style={[
+                  styles.universityDropdown,
+                  windowWidth < 700 && {
+                    position: 'absolute',
+                    top: 44,
+                    left: 0,
+                    right: 0,
+                    zIndex: 100,
+                    elevation: 20,
+                    marginTop: 0,
+                  },
+                ]}
+              >
                 <TouchableOpacity
                   style={styles.universityOption}
                   onPress={() => {
@@ -744,7 +826,12 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
             ) : null}
           </View>
 
-          <View style={styles.productSearchWrap}>
+          <View
+            style={[
+              styles.productSearchWrap,
+              windowWidth < 700 && { marginTop: 10, width: '100%', minWidth: 0, maxWidth: '100%' },
+            ]}
+          >
             <View style={[styles.searchIconWrap, isProductSearchFocused && styles.searchIconWrapFocused]}>
               <Ionicons name="search" size={14} color={isProductSearchFocused ? '#1D4ED8' : '#64748B'} />
             </View>
@@ -834,16 +921,29 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
         visible={detailsVisible}
         product={selectedProduct}
         onEdit={openEditModal}
-        onViewShop={(product) => {
+        onViewShop={async (product) => {
           if (!product.seller_id) return;
 
-          setSelectedSellerForShop({
-            id: product.seller_id,
-            full_name: product.display_name || null,
-            username: product.display_name || null,
-            email: null,
-            shop_name: product.shop_name || null,
-          });
+          // Fetch seller info from database
+          const { data: seller, error } = await supabase
+            .from('users')
+            .select('id, full_name, username, email, shop_name, shop_phone')
+            .eq('id', product.seller_id)
+            .single();
+
+          if (error || !seller) {
+            // fallback to minimal info if fetch fails
+            setSelectedSellerForShop({
+              id: product.seller_id,
+              full_name: product.display_name || null,
+              username: product.display_name || null,
+              email: (product as any).email || null,
+              shop_name: product.shop_name || null,
+              shop_phone: (product as any).shop_phone || null,
+            });
+          } else {
+            setSelectedSellerForShop(seller);
+          }
           setShowSellerShop(true);
         }}
         onClose={() => {
@@ -906,13 +1006,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 220,
     maxWidth: 360,
-    minHeight: 42,
+    minHeight: 32,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -937,7 +1037,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 16,
-    height: 20,
+    height: 18,
     color: '#0F172A',
     paddingVertical: 0,
     paddingHorizontal: 0,
@@ -1079,12 +1179,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#BFDBFE',
     backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    minHeight: 42,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minHeight: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 74,
+    minWidth: 60,
   },
   selectedCountTopRow: {
     flexDirection: 'row',
@@ -1211,7 +1311,7 @@ const styles = StyleSheet.create({
   },
   imageWrap: {
     width: '100%',
-    aspectRatio: 1.25,
+    aspectRatio: 1.05,
     backgroundColor: '#E2E8F0',
     position: 'relative',
   },
@@ -1234,29 +1334,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cardBody: {
-    padding: 7,
+    padding: 4,
   },
   cardTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#0F172A',
-    lineHeight: 15,
-    height: 30,
-    marginBottom: 5,
+    lineHeight: 13,
+    height: 22,
+    marginBottom: 3,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 2,
   },
   priceText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#F68B1E',
-    marginRight: 6,
+    marginRight: 4,
   },
   originalPrice: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#94A3B8',
     textDecorationLine: 'line-through',
   },
@@ -1530,6 +1630,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  headerMobile: {
+    paddingHorizontal: 8,
+    paddingTop: 0,
+    paddingBottom: 8,
+  },
+  gridRowMobile: {
+    flexDirection: 'column',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  cardMobile: {
+    minWidth: '98%',
+    maxWidth: '100%',
+    marginBottom: 10,
+    borderRadius: 8,
+    padding: 6,
   },
 });
 

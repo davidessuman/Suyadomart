@@ -10,6 +10,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -37,6 +38,7 @@ type SellerUser = {
   username: string | null;
   email: string | null;
   shop_name?: string | null;
+  shop_phone?: string | null;
 };
 
 type SellerProduct = {
@@ -169,6 +171,9 @@ const calculateDiscount = (original: number | null, current: number): number | n
 };
 
 const SellerShopModal = ({ visible, seller, onClose }: SellerShopModalProps) => {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 700;
+
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<ShopStats>({
@@ -295,7 +300,6 @@ const SellerShopModal = ({ visible, seller, onClose }: SellerShopModalProps) => 
           .map((row) => {
             const linkedOrder = Array.isArray(row.orders) ? row.orders[0] : row.orders;
             if (!linkedOrder) return null;
-
             return {
               id: linkedOrder.id,
               order_number: linkedOrder.order_number,
@@ -646,8 +650,6 @@ const SellerShopModal = ({ visible, seller, onClose }: SellerShopModalProps) => 
     );
   };
 
-  const sellerName = seller?.full_name || seller?.username || seller?.email || 'Seller';
-  const shopName = seller?.shop_name || 'Seller Shop';
 
   const openEditModal = (product: AdminDashboardProduct) => {
     setEditingProduct(product);
@@ -661,21 +663,27 @@ const SellerShopModal = ({ visible, seller, onClose }: SellerShopModalProps) => 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <View style={[styles.container, isMobile && { width: '98%', maxWidth: undefined, borderRadius: 10, paddingHorizontal: 0 }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, isMobile && styles.headerMobile]}>
             <View style={styles.headerLeft}>
               <View style={styles.shopIcon}>
-                <Ionicons name="storefront" size={22} color="#2563EB" />
+                <Ionicons name="storefront-outline" size={28} color="#2563EB" />
               </View>
               <View style={styles.headerTextWrap}>
-                <Text style={styles.headerTitle}>{shopName}</Text>
-                <Text style={styles.headerSubtitle}>{sellerName}</Text>
+                <Text style={[styles.headerTitle, isMobile && styles.headerTitleMobile]} numberOfLines={1}>
+                  {seller?.shop_name || seller?.full_name || 'Seller Shop'}
+                </Text>
+                <Text style={[styles.headerSubtitle, isMobile && styles.headerSubtitleMobile]} numberOfLines={1}>
+                  {seller?.email || ''}
+                </Text>
+                <Text style={[styles.headerSubtitle, isMobile && styles.headerSubtitleMobile]} numberOfLines={1}>
+                  {seller?.shop_phone ? `Phone: ${seller.shop_phone}` : ''}
+                </Text>
               </View>
             </View>
-
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
               <Ionicons name="close" size={22} color="#64748B" />
             </TouchableOpacity>
@@ -854,6 +862,11 @@ const SellerShopModal = ({ visible, seller, onClose }: SellerShopModalProps) => 
 };
 
 const styles = StyleSheet.create({
+  headerContactText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginRight: 2,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.7)',
@@ -1276,6 +1289,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  headerMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  headerTitleMobile: {
+    fontSize: 16,
+  },
+  headerSubtitleMobile: {
+    fontSize: 12,
   },
 });
 

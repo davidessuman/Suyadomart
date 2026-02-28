@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Alert, TouchableOpacity, FlatList, RefreshControl, ScrollView, TextInput } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Alert, TouchableOpacity, FlatList, RefreshControl, ScrollView, TextInput, useWindowDimensions, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -906,46 +906,49 @@ const UsersPanel = () => {
   );
 };
 
+
+const MOBILE_BREAKPOINT = 700;
 const AdminDashboard = () => {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>('Overview');
   const [menuCollapsed, setMenuCollapsed] = useState(false);
+  const { width } = useWindowDimensions();
+  const isMobile = width < MOBILE_BREAKPOINT;
+
+  // Collapse menu by default on mobile
+  useEffect(() => {
+    setMenuCollapsed(isMobile);
+  }, [isMobile]);
 
   const handleTabPress = (tab: DashboardTab) => {
     setActiveTab(tab);
+    if (isMobile) setMenuCollapsed(true); // auto-close menu on mobile
   };
 
   useEffect(() => {
     const checkAdminAccess = async () => {
       try {
-        // Check sessionStorage authentication flag
         const flag = sessionStorage.getItem('admin_authenticated');
         if (flag !== 'true') {
           router.replace('/admin');
           setChecking(false);
           return;
         }
-
-        // Get current user
         const { data } = await supabase.auth.getUser();
         const user = data?.user;
-
         if (!user) {
           sessionStorage.removeItem('admin_authenticated');
           router.replace('/admin');
           setChecking(false);
           return;
         }
-
-        // Check if admin is active
         const { data: adminRecord, error } = await supabase
           .from('admins')
           .select('is_active')
           .eq('user_id', user.id)
           .single();
-
         if (error || !adminRecord) {
           sessionStorage.removeItem('admin_authenticated');
           Alert.alert('Error', 'Admin account not found');
@@ -953,8 +956,6 @@ const AdminDashboard = () => {
           setChecking(false);
           return;
         }
-
-        // Check if admin is active
         if (!adminRecord.is_active) {
           sessionStorage.removeItem('admin_authenticated');
           Alert.alert(
@@ -965,8 +966,6 @@ const AdminDashboard = () => {
           setChecking(false);
           return;
         }
-
-        // All checks passed
         setAuthorized(true);
         setChecking(false);
       } catch (error) {
@@ -976,7 +975,6 @@ const AdminDashboard = () => {
         setChecking(false);
       }
     };
-
     checkAdminAccess();
   }, [router]);
 
@@ -987,74 +985,104 @@ const AdminDashboard = () => {
       </View>
     );
   }
-
   if (!authorized) return null;
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Admin Dashboard</Text>
+      <View style={[styles.header, isMobile && { paddingHorizontal: 10, paddingVertical: 10 }] }>
+        <Text style={[styles.title, isMobile && { fontSize: 18 }]}>Admin Dashboard</Text>
         <AdminProfile />
       </View>
-
-      <View style={styles.contentWrapper}>
-        <View style={[styles.sideMenu, menuCollapsed && styles.sideMenuCollapsed]}>
-          <TouchableOpacity
-            style={[styles.menuToggleButton, menuCollapsed && styles.menuToggleButtonCollapsed]}
-            onPress={() => setMenuCollapsed((prev) => !prev)}
-          >
-            <Ionicons name="menu" size={20} color="#475569" />
-            {!menuCollapsed ? <Text style={styles.menuToggleText}>Menu</Text> : null}
-          </TouchableOpacity>
-
-          {DASHBOARD_TABS.map((tab) => {
-            const isActive = activeTab === tab.label;
-
-            return (
+      <View style={[styles.contentWrapper, isMobile && { flexDirection: 'column' }] }>
+        {/* Mobile: show menu as top bar or overlay */}
+        {isMobile ? (
+          <>
+            <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', zIndex: 10 }}>
               <TouchableOpacity
-                key={tab.label}
-                style={[
-                  styles.sideMenuItem,
-                  menuCollapsed && styles.sideMenuItemCollapsed,
-                  isActive && styles.sideMenuItemActive,
-                  isActive && menuCollapsed && styles.sideMenuItemActiveCollapsed,
-                ]}
-                onPress={() => handleTabPress(tab.label)}
+                style={{ padding: 10, flexDirection: 'row', alignItems: 'center' }}
+                onPress={() => setMenuCollapsed((prev) => !prev)}
               >
-                <View
-                  style={[
-                    styles.sideMenuIconWrap,
-                    menuCollapsed && styles.sideMenuIconWrapCollapsed,
-                    isActive && styles.sideMenuIconWrapActive,
-                  ]}
-                >
-                  <Ionicons
-                    name={isActive ? tab.activeIcon : tab.icon}
-                    size={18}
-                    color={isActive ? TAB_ACTIVE_COLOR : '#64748B'}
-                  />
-                </View>
-                {!menuCollapsed ? (
-                  <>
-                    <Text style={[styles.sideMenuText, isActive && styles.sideMenuTextActive]}>{tab.label}</Text>
-                    {isActive ? <View style={styles.activeIndicator} /> : null}
-                  </>
-                ) : null}
-                {isActive ? <View style={styles.activeEdge} /> : null}
+                <Ionicons name="menu" size={22} color="#475569" />
+                <Text style={{ marginLeft: 8, fontWeight: '700', color: '#334155', fontSize: 15 }}>Menu</Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.mainContent}>
+              <Text style={{ flex: 1 }} />
+            </View>
+            {!menuCollapsed && (
+              <View style={{ backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingVertical: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                  {DASHBOARD_TABS.map((tab) => {
+                    const isActive = activeTab === tab.label;
+                    return (
+                      <TouchableOpacity
+                        key={tab.label}
+                        style={{ alignItems: 'center', padding: 8, borderBottomWidth: isActive ? 2 : 0, borderBottomColor: TAB_ACTIVE_COLOR }}
+                        onPress={() => handleTabPress(tab.label)}
+                      >
+                        <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={18} color={isActive ? TAB_ACTIVE_COLOR : '#64748B'} />
+                        <Text style={{ fontSize: 13, fontWeight: isActive ? '700' : '500', color: isActive ? TAB_ACTIVE_COLOR : '#1E293B' }}>{tab.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={[styles.sideMenu, menuCollapsed && styles.sideMenuCollapsed]}>
+            <TouchableOpacity
+              style={[styles.menuToggleButton, menuCollapsed && styles.menuToggleButtonCollapsed]}
+              onPress={() => setMenuCollapsed((prev) => !prev)}
+            >
+              <Ionicons name="menu" size={20} color="#475569" />
+              {!menuCollapsed ? <Text style={styles.menuToggleText}>Menu</Text> : null}
+            </TouchableOpacity>
+            {DASHBOARD_TABS.map((tab) => {
+              const isActive = activeTab === tab.label;
+              return (
+                <TouchableOpacity
+                  key={tab.label}
+                  style={[
+                    styles.sideMenuItem,
+                    menuCollapsed && styles.sideMenuItemCollapsed,
+                    isActive && styles.sideMenuItemActive,
+                    isActive && menuCollapsed && styles.sideMenuItemActiveCollapsed,
+                  ]}
+                  onPress={() => handleTabPress(tab.label)}
+                >
+                  <View
+                    style={[
+                      styles.sideMenuIconWrap,
+                      menuCollapsed && styles.sideMenuIconWrapCollapsed,
+                      isActive && styles.sideMenuIconWrapActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name={isActive ? tab.activeIcon : tab.icon}
+                      size={18}
+                      color={isActive ? TAB_ACTIVE_COLOR : '#64748B'}
+                    />
+                  </View>
+                  {!menuCollapsed ? (
+                    <>
+                      <Text style={[styles.sideMenuText, isActive && styles.sideMenuTextActive]}>{tab.label}</Text>
+                      {isActive ? <View style={styles.activeIndicator} /> : null}
+                    </>
+                  ) : null}
+                  {isActive ? <View style={styles.activeEdge} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+        <View style={[styles.mainContent, isMobile && { paddingHorizontal: 8, paddingVertical: 10 }] }>
           {activeTab === 'Users' ? (
             <UsersPanel />
           ) : activeTab === 'Products' ? (
             <AdminProductsPage enableHorizontalScroll />
           ) : (
             <>
-              <Text style={styles.sectionTitle}>{activeTab}</Text>
-              <Text style={styles.sectionSubtitle}>Select a menu tab to manage {activeTab.toLowerCase()}.</Text>
+              <Text style={[styles.sectionTitle, isMobile && { fontSize: 16 }]}>{activeTab}</Text>
+              <Text style={[styles.sectionSubtitle, isMobile && { fontSize: 12 }]}>Select a menu tab to manage {activeTab.toLowerCase()}.</Text>
             </>
           )}
         </View>

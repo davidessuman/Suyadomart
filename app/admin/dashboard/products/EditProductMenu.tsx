@@ -1374,6 +1374,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  fieldMobile: {
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+  },
+  selectDropdownMobile: {
+    minWidth: '98%',
+    maxWidth: '100%',
+    borderRadius: 8,
+    padding: 6,
+  },
+  scrollViewMobile: {
+    paddingHorizontal: 4,
+  },
 });
 
 export default EditProductMenu;

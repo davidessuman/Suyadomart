@@ -920,6 +920,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
   },
+  headerMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  sellerHeaderRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  infoTabsWrapMobile: {
+    flexDirection: 'column',
+    gap: 6,
+    paddingHorizontal: 0,
+  },
 });
 
 export default ProductDetailsMenu;

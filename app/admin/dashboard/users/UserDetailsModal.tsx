@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image, useWindowDimensions } from 'react-native';
 // Make sure ModifyUserMenu.tsx exists in the same folder, or update the path if it's elsewhere
 import { Ionicons } from '@expo/vector-icons';
 
@@ -26,7 +26,10 @@ interface UserDetailsModalProps {
 }
 
 
+const MOBILE_BREAKPOINT = 700;
 const UserDetailsModal = ({ visible, user, onClose, onViewShop }: UserDetailsModalProps) => {
+  const { width } = useWindowDimensions();
+  const isMobile = width < MOBILE_BREAKPOINT;
   if (!user) return null;
 
   const formatDate = (dateString: string) => {
@@ -45,7 +48,6 @@ const UserDetailsModal = ({ visible, user, onClose, onViewShop }: UserDetailsMod
 
   const handleViewShop = () => {
     if (!isSeller) return;
-
     onClose();
     onViewShop?.(user);
   };
@@ -53,7 +55,7 @@ const UserDetailsModal = ({ visible, user, onClose, onViewShop }: UserDetailsMod
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <View style={[styles.container, isMobile && { width: '96%', minWidth: undefined, maxWidth: undefined, padding: 10 }] }>
           {/* Header with Avatar */}
           <View style={styles.header}>
             <View style={styles.headerContent}>

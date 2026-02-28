@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import UserDetailsModal from './UserDetailsModal';
@@ -17,8 +17,10 @@ type UserProfile = {
   shop_phone?: string | null;
   orders_count?: number;
 };
-
 const AdminUsersDashboard = () => {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 700;
+
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -142,26 +144,16 @@ const AdminUsersDashboard = () => {
           const shopsMap = new Map(shopsData.map((shop) => [shop.owner_id, { name: shop.name, phone: shop.phone }]));
 
           const enrichedUsers = usersData.map((user) => {
-            if (user.is_seller && shopsMap.has(user.id)) {
-              const shop = shopsMap.get(user.id)!;
-              return {
-                ...user,
-                shop_name: shop.name,
-                shop_phone: shop.phone,
-                orders_count: orderCountBySeller.get(user.id) || 0,
-              };
-            }
-
             if (user.is_seller) {
               return {
                 ...user,
                 orders_count: orderCountBySeller.get(user.id) || 0,
+                shop_name: shopsMap.get(user.id)?.name || null,
+                shop_phone: shopsMap.get(user.id)?.phone || null,
               };
             }
-
             return user;
           });
-
           setUsers(enrichedUsers);
         } else {
           const enrichedUsers = usersData.map((user) => {
@@ -198,43 +190,59 @@ const AdminUsersDashboard = () => {
         style={[
           styles.tableRow,
           index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd,
+          isMobile && styles.tableRowMobile,
         ]}
         onPress={() => {
           setSelectedUser(item);
           setShowUserDetails(true);
         }}
       >
-        <View style={[styles.colName, styles.columnContainer]}>
-          <Text style={styles.tableCellText} numberOfLines={1}>
+        <View style={[styles.colName, styles.columnContainer, isMobile && styles.colMobile]}>
+          <Text style={[styles.tableCellText, isMobile && styles.tableCellTextMobile]} numberOfLines={2}>
             {name}
           </Text>
         </View>
         {!hideUsername && (
-          <View style={[styles.colUsername, styles.columnContainer]}>
-            <Text style={styles.tableCellText} numberOfLines={1}>
+          <View style={[styles.colUsername, styles.columnContainer, isMobile && styles.colMobile]}>
+            <Text
+              style={[styles.tableCellText, isMobile && styles.tableCellTextMobile]}
+              numberOfLines={2}
+            >
               {item.username || '-'}
             </Text>
           </View>
         )}
-        <View style={[styles.colEmail, styles.columnContainer]}>
-          <Text style={styles.tableCellText} numberOfLines={1}>
+        <View style={[styles.colEmail, styles.columnContainer, isMobile && styles.colMobile]}>
+          <Text
+            style={[styles.tableCellText, isMobile && styles.tableCellTextMobile]}
+            numberOfLines={2}
+          >
             {item.email || '-'}
           </Text>
         </View>
-        <View style={[styles.colUniversity, styles.columnContainer]}>
-          <Text style={styles.tableCellText} numberOfLines={1}>
+        <View style={[styles.colUniversity, styles.columnContainer, isMobile && styles.colMobile]}>
+          <Text
+            style={[styles.tableCellText, isMobile && styles.tableCellTextMobile]}
+            numberOfLines={2}
+          >
             {item.university || '-'}
           </Text>
         </View>
         {showShopColumns && (
           <>
-            <View style={[styles.colShopName, styles.columnContainer]}>
-              <Text style={styles.tableCellText} numberOfLines={1}>
+            <View style={[styles.colShopName, styles.columnContainer, isMobile && styles.colMobile]}>
+              <Text
+                style={[styles.tableCellText, isMobile && styles.tableCellTextMobile]}
+                numberOfLines={2}
+              >
                 {item.shop_name || '-'}
               </Text>
             </View>
-            <View style={[styles.colShopPhone, styles.columnContainer]}>
-              <Text style={styles.tableCellText} numberOfLines={1}>
+            <View style={[styles.colShopPhone, styles.columnContainer, isMobile && styles.colMobile]}>
+              <Text
+                style={[styles.tableCellText, isMobile && styles.tableCellTextMobile]}
+                numberOfLines={2}
+              >
                 {item.shop_phone || '-'}
               </Text>
             </View>
@@ -250,7 +258,7 @@ const AdminUsersDashboard = () => {
                   styles.tableCellText,
                   (item.orders_count ?? 0) > 0 && styles.colOrdersCellTextHighlighted,
                 ]}
-                numberOfLines={1}
+                numberOfLines={2}
               >
                 {item.orders_count ?? 0}
               </Text>
@@ -380,14 +388,14 @@ const AdminUsersDashboard = () => {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.tableWrapper}>
-          <View style={styles.tableHeaderRow}>
-            <View style={[styles.colName]}>
+        <View style={[styles.tableWrapper, isMobile && styles.tableWrapperMobile]}>
+          <View style={[styles.tableHeaderRow, isMobile && styles.tableHeaderRowMobile]}>
+            <View style={[styles.colName, isMobile && styles.colMobile]}>
               <TouchableOpacity
                 style={styles.columnHeaderContainer}
                 onPress={() => setSearchColumn(searchColumn === 'name' ? null : 'name')}
               >
-                <Text style={styles.tableHeaderText}>Name</Text>
+                <Text style={[styles.tableHeaderText, isMobile && styles.tableHeaderTextMobile]}>Name</Text>
                 {searchColumn === 'name' && (
                   <Ionicons name="search" size={12} color="#2563EB" style={{ marginLeft: 4 }} />
                 )}
@@ -414,12 +422,12 @@ const AdminUsersDashboard = () => {
               )}
             </View>
             {selectedRole !== 'seller' && (
-              <View style={[styles.colUsername]}>
+              <View style={[styles.colUsername, isMobile && styles.colMobile]}>
                 <TouchableOpacity
                   style={styles.columnHeaderContainer}
                   onPress={() => setSearchColumn(searchColumn === 'username' ? null : 'username')}
                 >
-                  <Text style={styles.tableHeaderText}>Username</Text>
+                  <Text style={[styles.tableHeaderText, isMobile && styles.tableHeaderTextMobile]}>Username</Text>
                   {searchColumn === 'username' && (
                     <Ionicons name="search" size={12} color="#2563EB" style={{ marginLeft: 4 }} />
                   )}
@@ -446,12 +454,12 @@ const AdminUsersDashboard = () => {
                 )}
               </View>
             )}
-            <View style={[styles.colEmail]}>
+            <View style={[styles.colEmail, isMobile && styles.colMobile]}>
               <TouchableOpacity
                 style={styles.columnHeaderContainer}
                 onPress={() => setSearchColumn(searchColumn === 'email' ? null : 'email')}
               >
-                <Text style={styles.tableHeaderText}>Email</Text>
+                <Text style={[styles.tableHeaderText, isMobile && styles.tableHeaderTextMobile]}>Email</Text>
                 {searchColumn === 'email' && (
                   <Ionicons name="search" size={12} color="#2563EB" style={{ marginLeft: 4 }} />
                 )}
@@ -640,6 +648,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
+    // On mobile, reduce border radius and shadow
+  },
+  tableWrapperMobile: {
+    borderRadius: 8,
+    shadowRadius: 2,
+    paddingHorizontal: 0,
   },
   tableHeaderRow: {
     flexDirection: 'row',
@@ -648,12 +662,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
+  tableHeaderRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
   tableHeaderText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+  },
+  tableHeaderTextMobile: {
+    fontSize: 13,
+    paddingBottom: 2,
+    textAlign: 'left',
   },
   tableRow: {
     flexDirection: 'row',
@@ -662,6 +687,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F4F8',
+  },
+  tableRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   tableRowEven: {
     backgroundColor: '#FFFFFF',
@@ -673,6 +704,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1E293B',
     fontWeight: '500',
+  },
+  tableCellTextMobile: {
+    fontSize: 13,
+    paddingBottom: 2,
+    textAlign: 'left',
   },
   columnContainer: {
     borderRightWidth: 1,
@@ -900,6 +936,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 8,
     top: 16,
+  },
+  colMobile: {
+    width: '100%',
+    flex: undefined,
+    paddingHorizontal: 0,
+    marginBottom: 8,
   },
 });
 
