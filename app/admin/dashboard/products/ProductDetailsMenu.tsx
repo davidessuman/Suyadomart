@@ -16,9 +16,11 @@ export type AdminDashboardProduct = {
   media_urls: string[];
   color_media?: Record<string, string[]> | null;
   color_stock?: Record<string, string> | null;
+  size_stock?: Record<string, string> | null;
   category: string;
   sub_category: string | null;
   gender: string | null;
+  underwear_type?: string | null;
   brand: string | null;
   delivery_option: string;
   quantity: number | null;

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
-import Svg, { Circle, G, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Line, Rect, Text as SvgText } from 'react-native-svg';
 
 type DashboardStats = {
   totalUsers: number;
@@ -51,7 +51,7 @@ type DonutSlice = {
 };
 
 type OrderStatusPoint = {
-  key: 'pending' | 'processing' | 'shipped' | 'completed' | 'cancelled';
+  key: 'pending' | 'processing' | 'completed' | 'cancelled';
   label: string;
   value: number;
   color: string;
@@ -80,6 +80,17 @@ type DonutHoverState = {
   label: string;
   value: number;
   percent: number;
+  color: string;
+};
+
+type SliceLabelPosition = {
+  x: number;
+  y: number;
+  anchor: 'start' | 'middle' | 'end';
+  lineStartX: number;
+  lineStartY: number;
+  lineEndX: number;
+  lineEndY: number;
 };
 
 const EMPTY_STATS: DashboardStats = {
@@ -217,7 +228,6 @@ const AdminOverviewPage = () => {
       completedOrdersCountRes,
       pendingOrdersCountRes,
       processingOrdersCountRes,
-      shippedOrdersCountRes,
       cancelledOrdersCountRes,
       completedOrdersRevenueRes,
       eventsTodayCountRes,
@@ -246,7 +256,6 @@ const AdminOverviewPage = () => {
       supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
       supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'processing'),
-      supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'shipped'),
       supabase.from('orders').select('*', { count: 'exact', head: true }).eq('status', 'cancelled'),
       supabase.from('orders').select('total_amount').eq('status', 'completed'),
       supabase.from('events').select('*', { count: 'exact', head: true }).eq('date', todayISO),
@@ -327,7 +336,6 @@ const AdminOverviewPage = () => {
     let totalCompletedOrdersValue = completedOrdersCountRes.count ?? 0;
     let pendingOrdersValue = pendingOrdersCountRes.count ?? 0;
     let processingOrdersValue = processingOrdersCountRes.count ?? 0;
-    let shippedOrdersValue = shippedOrdersCountRes.count ?? 0;
     let cancelledOrdersValue = cancelledOrdersCountRes.count ?? 0;
     let totalRevenueCompletedValue = (completedOrdersRevenueRes.data ?? []).reduce(
       (sum: number, row: { total_amount: number | string | null }) => sum + Number(row.total_amount || 0),
@@ -370,7 +378,6 @@ const AdminOverviewPage = () => {
         totalCompletedOrdersValue = mergedOrders.filter((order) => order.status === 'completed').length;
         pendingOrdersValue = mergedOrders.filter((order) => order.status === 'pending').length;
         processingOrdersValue = mergedOrders.filter((order) => order.status === 'processing').length;
-        shippedOrdersValue = mergedOrders.filter((order) => order.status === 'shipped').length;
         cancelledOrdersValue = mergedOrders.filter((order) => order.status === 'cancelled').length;
         totalRevenueCompletedValue = mergedOrders
           .filter((order) => order.status === 'completed')
@@ -397,7 +404,6 @@ const AdminOverviewPage = () => {
     setOrderStatusData([
       { key: 'pending', label: 'Pending', value: pendingOrdersValue, color: '#F59E0B' },
       { key: 'processing', label: 'Processing', value: processingOrdersValue, color: '#6366F1' },
-      { key: 'shipped', label: 'Shipped', value: shippedOrdersValue, color: '#0EA5E9' },
       { key: 'completed', label: 'Completed', value: totalCompletedOrdersValue, color: '#10B981' },
       { key: 'cancelled', label: 'Cancelled', value: cancelledOrdersValue, color: '#EF4444' },
     ]);
@@ -751,19 +757,29 @@ const AdminOverviewPage = () => {
     </Pressable>
   );
 
-  const donutSlices: DonutSlice[] = [
-    { label: 'Users', value: stats.totalUsers, color: '#2563EB' },
-    { label: 'Products', value: stats.totalProducts, color: '#7C3AED' },
-    { label: 'Events', value: stats.totalEvents, color: '#059669' },
-    { label: 'Announcements', value: stats.totalAnnouncements, color: '#EA580C' },
-    { label: 'Orders', value: stats.totalOrders, color: '#0369A1' },
-  ];
+  const donutSlices = useMemo<DonutSlice[]>(
+    () => [
+      { label: 'Users', value: stats.totalUsers, color: '#2563EB' },
+      { label: 'Products', value: stats.totalProducts, color: '#7C3AED' },
+      { label: 'Events', value: stats.totalEvents, color: '#059669' },
+      { label: 'Announcements', value: stats.totalAnnouncements, color: '#EA580C' },
+      { label: 'Orders', value: stats.totalOrders, color: '#0369A1' },
+    ],
+    [stats.totalUsers, stats.totalProducts, stats.totalEvents, stats.totalAnnouncements, stats.totalOrders]
+  );
 
   const donutTotal = donutSlices.reduce((sum, slice) => sum + slice.value, 0);
 
   const audienceTotal = stats.totalSellers + stats.totalBuyers;
   const sellerShare = audienceTotal > 0 ? Math.round((stats.totalSellers / audienceTotal) * 100) : 0;
   const buyerShare = audienceTotal > 0 ? 100 - sellerShare : 0;
+  const audienceSlices = useMemo(
+    () => [
+      { label: 'Sellers', value: stats.totalSellers },
+      { label: 'Buyers', value: stats.totalBuyers },
+    ],
+    [stats.totalSellers, stats.totalBuyers]
+  );
   const totalOrderStatuses = orderStatusData.reduce((sum, item) => sum + item.value, 0);
   const maxUniversityActivityTotal = Math.max(1, ...universityActivityData.map((item) => item.total));
   const totalUniversityActivities = universityActivityData.reduce((sum, item) => sum + item.total, 0);
@@ -797,6 +813,221 @@ const AdminOverviewPage = () => {
     if (width >= 800) return '49%';
     return '100%';
   }, [width]);
+
+  const getHoveredSliceLabelPosition = useCallback(
+    (
+      slices: { label: string; value: number }[],
+      hovered: DonutHoverState | null,
+      total: number,
+      center: number,
+      radius: number,
+      padding: number
+    ): SliceLabelPosition | null => {
+      if (!hovered || total <= 0) return null;
+
+      let cumulativeRatio = 0;
+      const chartSize = center * 2;
+      for (const slice of slices) {
+        const ratio = slice.value / total;
+        if (slice.label === hovered.label) {
+          const angle = (cumulativeRatio + ratio / 2) * Math.PI * 2 - Math.PI / 2;
+          const horizontal = Math.cos(angle);
+          const vertical = Math.sin(angle);
+
+          const lineStartX = center + horizontal * (radius + 4);
+          const lineStartY = center + vertical * (radius + 4);
+          const x = center + horizontal * (radius + padding);
+          const y = center + vertical * (radius + padding);
+          const safeY = Math.max(12, Math.min(chartSize - 12, y));
+
+          if (horizontal > 0.2) {
+            const safeX = Math.min(chartSize - 8, x);
+            return {
+              x: safeX,
+              y: safeY,
+              anchor: 'end',
+              lineStartX,
+              lineStartY,
+              lineEndX: safeX - 3,
+              lineEndY: safeY,
+            };
+          }
+
+          if (horizontal < -0.2) {
+            const safeX = Math.max(8, x);
+            return {
+              x: safeX,
+              y: safeY,
+              anchor: 'start',
+              lineStartX,
+              lineStartY,
+              lineEndX: safeX + 3,
+              lineEndY: safeY,
+            };
+          }
+
+          return {
+            x,
+            y: safeY,
+            anchor: 'middle',
+            lineStartX,
+            lineStartY,
+            lineEndX: x,
+            lineEndY: safeY,
+          };
+        }
+        cumulativeRatio += ratio;
+      }
+
+      return null;
+    },
+    []
+  );
+
+  const hoveredDonutPosition = useMemo(
+    () => getHoveredSliceLabelPosition(donutSlices, hoveredDonut, donutTotal, donutCenter, donutOuterRadius, isSmallScreen ? 16 : 20),
+    [donutSlices, hoveredDonut, donutTotal, donutCenter, donutOuterRadius, isSmallScreen, getHoveredSliceLabelPosition]
+  );
+
+  const hoveredOrderStatusPosition = useMemo(
+    () =>
+      getHoveredSliceLabelPosition(
+        orderStatusData,
+        hoveredOrderStatus,
+        totalOrderStatuses,
+        orderStatusPieCenter,
+        orderStatusPieRadius,
+        isSmallScreen ? 12 : 16
+      ),
+    [
+      orderStatusData,
+      hoveredOrderStatus,
+      totalOrderStatuses,
+      orderStatusPieCenter,
+      orderStatusPieRadius,
+      isSmallScreen,
+      getHoveredSliceLabelPosition,
+    ]
+  );
+
+  const hoveredAudiencePosition = useMemo(
+    () => getHoveredSliceLabelPosition(audienceSlices, hoveredAudienceMix, audienceTotal, audiencePieCenter, audiencePieRadius, isTinyScreen ? 9 : 11),
+    [audienceSlices, hoveredAudienceMix, audienceTotal, audiencePieCenter, audiencePieRadius, isTinyScreen, getHoveredSliceLabelPosition]
+  );
+
+  const hoveredUniversitySharePosition = useMemo(
+    () =>
+      getHoveredSliceLabelPosition(
+        universityShareSlices,
+        hoveredUniversityShare,
+        universityShareTotal,
+        universitySharePieCenter,
+        universitySharePieRadius,
+        isSmallScreen ? 12 : 16
+      ),
+    [
+      universityShareSlices,
+      hoveredUniversityShare,
+      universityShareTotal,
+      universitySharePieCenter,
+      universitySharePieRadius,
+      isSmallScreen,
+      getHoveredSliceLabelPosition,
+    ]
+  );
+
+  const renderHoveredSliceLabel = (
+    hovered: DonutHoverState | null,
+    position: SliceLabelPosition | null,
+    chartSize: number,
+    compact = false
+  ) => {
+    if (!hovered || !position) return null;
+
+    const labelText = hovered.label;
+    const valueText = `Count: ${hovered.value.toLocaleString()}`;
+    const bannerHeight = compact ? 34 : 38;
+    const bannerWidth = Math.max(
+      compact ? 96 : 118,
+      Math.min(
+        compact ? 150 : 190,
+        Math.max(labelText.length, valueText.length) * (compact ? 5.4 : 6.1) + 20
+      )
+    );
+
+    let bannerX =
+      position.anchor === 'end'
+        ? position.x - bannerWidth
+        : position.anchor === 'start'
+          ? position.x
+          : position.x - bannerWidth / 2;
+    bannerX = Math.max(4, Math.min(chartSize - bannerWidth - 4, bannerX));
+
+    let bannerY = position.y - bannerHeight / 2;
+    bannerY = Math.max(4, Math.min(chartSize - bannerHeight - 4, bannerY));
+
+    const lineTargetX =
+      position.lineEndX < bannerX
+        ? bannerX
+        : position.lineEndX > bannerX + bannerWidth
+          ? bannerX + bannerWidth
+          : position.lineEndX;
+    const lineTargetY = Math.max(
+      bannerY + 6,
+      Math.min(bannerY + bannerHeight - 6, position.lineEndY)
+    );
+
+    return (
+      <>
+        <Line
+          x1={position.lineStartX}
+          y1={position.lineStartY}
+          x2={lineTargetX}
+          y2={lineTargetY}
+          stroke="#94A3B8"
+          strokeWidth={compact ? 1 : 1.25}
+        />
+        <Rect
+          x={bannerX}
+          y={bannerY}
+          width={bannerWidth}
+          height={bannerHeight}
+          rx={8}
+          fill="#FFFFFF"
+          stroke={hovered.color}
+          strokeWidth={1.2}
+        />
+        <Rect
+          x={bannerX}
+          y={bannerY}
+          width={3}
+          height={bannerHeight}
+          rx={2}
+          fill={hovered.color}
+        />
+        <SvgText
+          x={bannerX + 10}
+          y={bannerY + (compact ? 12 : 13)}
+          fontSize={compact ? '8' : '9'}
+          fill="#334155"
+          textAnchor="start"
+          fontWeight="700"
+        >
+          {labelText}
+        </SvgText>
+        <SvgText
+          x={bannerX + 10}
+          y={bannerY + (compact ? 25 : 28)}
+          fontSize={compact ? '9' : '10'}
+          fill="#0F172A"
+          textAnchor="start"
+          fontWeight="700"
+        >
+          {valueText}
+        </SvgText>
+      </>
+    );
+  };
 
   const getHoverHandlers = (cardId: string) => {
     if (Platform.OS !== 'web') return {};
@@ -987,7 +1218,7 @@ const AdminOverviewPage = () => {
           </View>
 
           <View style={styles.donutWrap}>
-            <Svg width={donutSize} height={donutSize} viewBox={`0 0 ${donutSize} ${donutSize}`}>
+            <Svg width={donutSize} height={donutSize} viewBox={`0 0 ${donutSize} ${donutSize}`} style={styles.pieSvg}>
               <G rotation={-90} origin={`${donutCenter},${donutCenter}`}>
                 {(() => {
                   const circumference = 2 * Math.PI * donutOuterRadius;
@@ -1011,7 +1242,7 @@ const AdminOverviewPage = () => {
                         strokeLinecap="butt"
                         opacity={hoveredDonut && hoveredDonut.label !== slice.label ? 0.45 : 1}
                         {...getSvgHoverHandlers(
-                          () => setHoveredDonut({ label: slice.label, value: slice.value, percent }),
+                          () => setHoveredDonut({ label: slice.label, value: slice.value, percent, color: slice.color }),
                           () => setHoveredDonut((current) => (current?.label === slice.label ? null : current))
                         )}
                       />
@@ -1028,6 +1259,7 @@ const AdminOverviewPage = () => {
               <SvgText x={donutCenter} y={donutCenter + 16} fontSize={isSmallScreen ? '16' : '18'} fontWeight="700" fill="#0F172A" textAnchor="middle">
                 {donutTotal.toLocaleString()}
               </SvgText>
+              {renderHoveredSliceLabel(hoveredDonut, hoveredDonutPosition, donutSize)}
             </Svg>
           </View>
 
@@ -1083,7 +1315,7 @@ const AdminOverviewPage = () => {
 
           <View style={styles.ordersStatusPieSection}>
             <View style={styles.ordersStatusPieWrap}>
-              <Svg width={orderStatusPieSize} height={orderStatusPieSize} viewBox={`0 0 ${orderStatusPieSize} ${orderStatusPieSize}`}>
+              <Svg width={orderStatusPieSize} height={orderStatusPieSize} viewBox={`0 0 ${orderStatusPieSize} ${orderStatusPieSize}`} style={styles.pieSvg}>
                 <G rotation={-90} origin={`${orderStatusPieCenter},${orderStatusPieCenter}`}>
                   {(() => {
                     const circumference = 2 * Math.PI * orderStatusPieRadius;
@@ -1108,7 +1340,7 @@ const AdminOverviewPage = () => {
                           strokeLinecap="butt"
                           opacity={hoveredOrderStatus && hoveredOrderStatus.label !== slice.label ? 0.4 : 1}
                           {...getSvgHoverHandlers(
-                            () => setHoveredOrderStatus({ label: slice.label, value: slice.value, percent }),
+                            () => setHoveredOrderStatus({ label: slice.label, value: slice.value, percent, color: slice.color }),
                             () => setHoveredOrderStatus((current) => (current?.label === slice.label ? null : current))
                           )}
                         />
@@ -1126,6 +1358,7 @@ const AdminOverviewPage = () => {
                 <SvgText x={orderStatusPieCenter} y={orderStatusPieCenter + 14} fontSize={isTinyScreen ? '14' : '16'} fontWeight="700" fill="#0F172A" textAnchor="middle">
                   {stats.totalOrders.toLocaleString()}
                 </SvgText>
+                {renderHoveredSliceLabel(hoveredOrderStatus, hoveredOrderStatusPosition, orderStatusPieSize, isTinyScreen)}
               </Svg>
             </View>
 
@@ -1155,7 +1388,7 @@ const AdminOverviewPage = () => {
         >
           <Text style={styles.executiveSideTitle}>Audience Mix</Text>
           <View style={styles.audienceChartWrap}>
-            <Svg width={audiencePieSize} height={audiencePieSize} viewBox={`0 0 ${audiencePieSize} ${audiencePieSize}`}>
+            <Svg width={audiencePieSize} height={audiencePieSize} viewBox={`0 0 ${audiencePieSize} ${audiencePieSize}`} style={styles.pieSvg}>
               <G rotation={-90} origin={`${audiencePieCenter},${audiencePieCenter}`}>
                 {(() => {
                   const circumference = 2 * Math.PI * audiencePieRadius;
@@ -1175,7 +1408,7 @@ const AdminOverviewPage = () => {
                         strokeLinecap="butt"
                         opacity={hoveredAudienceMix && hoveredAudienceMix.label !== 'Sellers' ? 0.45 : 1}
                         {...getSvgHoverHandlers(
-                          () => setHoveredAudienceMix({ label: 'Sellers', value: stats.totalSellers, percent: sellerShare }),
+                          () => setHoveredAudienceMix({ label: 'Sellers', value: stats.totalSellers, percent: sellerShare, color: '#1D4ED8' }),
                           () => setHoveredAudienceMix((current) => (current?.label === 'Sellers' ? null : current))
                         )}
                       />
@@ -1191,7 +1424,7 @@ const AdminOverviewPage = () => {
                         strokeLinecap="butt"
                         opacity={hoveredAudienceMix && hoveredAudienceMix.label !== 'Buyers' ? 0.45 : 1}
                         {...getSvgHoverHandlers(
-                          () => setHoveredAudienceMix({ label: 'Buyers', value: stats.totalBuyers, percent: buyerShare }),
+                          () => setHoveredAudienceMix({ label: 'Buyers', value: stats.totalBuyers, percent: buyerShare, color: '#10B981' }),
                           () => setHoveredAudienceMix((current) => (current?.label === 'Buyers' ? null : current))
                         )}
                       />
@@ -1206,6 +1439,7 @@ const AdminOverviewPage = () => {
               <SvgText x={audiencePieCenter} y={audiencePieCenter + 13} fontSize={isTinyScreen ? '13' : '15'} fontWeight="700" fill="#0F172A" textAnchor="middle">
                 {audienceTotal.toLocaleString()}
               </SvgText>
+              {renderHoveredSliceLabel(hoveredAudienceMix, hoveredAudiencePosition, audiencePieSize, true)}
             </Svg>
           </View>
           <View style={styles.audienceLegendRow}>
@@ -1219,14 +1453,6 @@ const AdminOverviewPage = () => {
               <Text style={styles.audienceLegendLabel}>Buyers</Text>
               <Text style={styles.audienceLegendValue}>{buyerShare}%</Text>
             </View>
-          </View>
-          <View style={styles.audienceHoverRow}>
-            <Ionicons name="information-circle-outline" size={13} color="#334155" />
-            <Text style={styles.audienceHoverText}>
-              {hoveredAudienceMix
-                ? `${hoveredAudienceMix.label}: ${hoveredAudienceMix.value.toLocaleString()} (${hoveredAudienceMix.percent}%)`
-                : 'Hover a slice to see exact count'}
-            </Text>
           </View>
         </Pressable>
 
@@ -1331,7 +1557,7 @@ const AdminOverviewPage = () => {
             </View>
 
             <View style={styles.universityShareChartWrap}>
-              <Svg width={universitySharePieSize} height={universitySharePieSize} viewBox={`0 0 ${universitySharePieSize} ${universitySharePieSize}`}>
+              <Svg width={universitySharePieSize} height={universitySharePieSize} viewBox={`0 0 ${universitySharePieSize} ${universitySharePieSize}`} style={styles.pieSvg}>
                 <G rotation={-90} origin={`${universitySharePieCenter},${universitySharePieCenter}`}>
                   {(() => {
                     const circumference = 2 * Math.PI * universitySharePieRadius;
@@ -1356,7 +1582,7 @@ const AdminOverviewPage = () => {
                           strokeLinecap="butt"
                           opacity={hoveredUniversityShare && hoveredUniversityShare.label !== slice.label ? 0.45 : 1}
                           {...getSvgHoverHandlers(
-                            () => setHoveredUniversityShare({ label: slice.label, value: slice.value, percent }),
+                            () => setHoveredUniversityShare({ label: slice.label, value: slice.value, percent, color: slice.color }),
                             () => setHoveredUniversityShare((current) => (current?.label === slice.label ? null : current))
                           )}
                         />
@@ -1374,6 +1600,7 @@ const AdminOverviewPage = () => {
                 <SvgText x={universitySharePieCenter} y={universitySharePieCenter + 14} fontSize={isTinyScreen ? '13' : '15'} fontWeight="700" fill="#0F172A" textAnchor="middle">
                   {universityShareTotal.toLocaleString()}
                 </SvgText>
+                {renderHoveredSliceLabel(hoveredUniversityShare, hoveredUniversitySharePosition, universitySharePieSize, isTinyScreen)}
               </Svg>
             </View>
 
@@ -1722,6 +1949,9 @@ const styles = StyleSheet.create({
   donutWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pieSvg: {
+    overflow: 'visible',
   },
   chartLegendList: {
     marginTop: 6,

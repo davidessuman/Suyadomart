@@ -264,7 +264,7 @@ const AdminProductsPage = ({ enableHorizontalScroll = false }: AdminProductsPage
 
     const { data, error } = await supabase
       .from('products')
-      .select('id, seller_id, title, description, price, original_price, media_urls, color_media, color_stock, category, sub_category, gender, brand, delivery_option, quantity, sizes_available, colors_available, is_pre_order, pre_order_duration, pre_order_duration_unit, is_service, created_at')
+      .select('id, seller_id, title, description, price, original_price, media_urls, color_media, color_stock, size_stock, category, sub_category, gender, underwear_type, brand, delivery_option, quantity, sizes_available, colors_available, is_pre_order, pre_order_duration, pre_order_duration_unit, is_service, created_at')
       .order('created_at', { ascending: false });
 
     if (error) {
