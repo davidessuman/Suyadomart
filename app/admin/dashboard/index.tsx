@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Alert, TouchableOpacity, FlatList, RefreshControl, ScrollView, TextInput, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Alert, TouchableOpacity, FlatList, RefreshControl, ScrollView, TextInput, useWindowDimensions } from 'react-native';
+import EventsPanel from './Events/EventsPanel';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -7,6 +8,7 @@ import AdminProfile from '../Profiles/AdminProfile';
 import UserDetailsModal from './users/UserDetailsModal';
 import SellerShopModal from './users/SellerShopModal';
 import AdminProductsPage from './products';
+import AdminOverviewPage from './overview/index';
 
 const TAB_ACTIVE_COLOR = '#2563EB';
 
@@ -61,6 +63,11 @@ const DASHBOARD_TABS = [
     label: 'Overview',
     icon: 'grid-outline',
     activeIcon: 'grid',
+  },
+  {
+    label: 'New Arivals',
+    icon: 'sparkles-outline',
+    activeIcon: 'sparkles',
   },
   {
     label: 'Users',
@@ -1075,15 +1082,39 @@ const AdminDashboard = () => {
           </View>
         )}
         <View style={[styles.mainContent, isMobile && { paddingHorizontal: 8, paddingVertical: 10 }] }>
-          {activeTab === 'Users' ? (
+          {activeTab === 'Overview' ? (
+            <AdminOverviewPage />
+          ) : activeTab === 'New Arivals' ? (
+            <View style={styles.newArrivalsWrap}>
+              <View style={styles.newArrivalsCard}>
+                <View style={styles.newArrivalsBadge}>
+                  <Ionicons name="sparkles" size={14} color="#1D4ED8" />
+                  <Text style={styles.newArrivalsBadgeText}>Coming Soon</Text>
+                </View>
+
+                <Text style={styles.newArrivalsTitle}>New Arivals</Text>
+                <Text style={styles.newArrivalsSubtitle}>New arrivals will be updated soon.</Text>
+
+                <View style={styles.newArrivalsMetaRow}>
+                  <View style={styles.newArrivalsMetaChip}>
+                    <Ionicons name="cube-outline" size={12} color="#64748B" />
+                    <Text style={styles.newArrivalsMetaText}>Latest products</Text>
+                  </View>
+                  <View style={styles.newArrivalsMetaChip}>
+                    <Ionicons name="flash-outline" size={12} color="#64748B" />
+                    <Text style={styles.newArrivalsMetaText}>Fast updates</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : activeTab === 'Users' ? (
             <UsersPanel />
           ) : activeTab === 'Products' ? (
             <AdminProductsPage enableHorizontalScroll />
+          ) : activeTab === 'Events' ? (
+            <EventsPanel />
           ) : (
-            <>
-              <Text style={[styles.sectionTitle, isMobile && { fontSize: 16 }]}>{activeTab}</Text>
-              <Text style={[styles.sectionSubtitle, isMobile && { fontSize: 12 }]}>Select a menu tab to manage {activeTab.toLowerCase()}.</Text>
-            </>
+            <View />
           )}
         </View>
       </View>
@@ -1225,6 +1256,71 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingVertical: 24,
+  },
+  newArrivalsWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newArrivalsCard: {
+    width: '100%',
+    maxWidth: 540,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    gap: 10,
+  },
+  newArrivalsBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  newArrivalsBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  newArrivalsTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  newArrivalsSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 20,
+  },
+  newArrivalsMetaRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  newArrivalsMetaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  newArrivalsMetaText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
   },
   usersPanelContainer: {
     flex: 1,
