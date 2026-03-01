@@ -53,7 +53,7 @@ const AdminProfile = () => {
           }
           setMenuVisible(false);
           setAdminsMenuVisible(false);
-          router.replace('/admin');
+          router.replace('/bravexyz00');
         }
       },
     });
@@ -67,7 +67,7 @@ const AdminProfile = () => {
       const user = data?.user;
 
       if (!user) {
-        router.replace('/admin');
+        router.replace('/bravexyz00');
         return;
       }
 

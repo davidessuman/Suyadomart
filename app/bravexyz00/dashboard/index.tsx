@@ -939,7 +939,7 @@ const AdminDashboard = () => {
       try {
         const flag = sessionStorage.getItem('admin_authenticated');
         if (flag !== 'true') {
-          router.replace('/admin');
+          router.replace('/bravexyz00');
           setChecking(false);
           return;
         }
@@ -947,7 +947,7 @@ const AdminDashboard = () => {
         const user = data?.user;
         if (!user) {
           sessionStorage.removeItem('admin_authenticated');
-          router.replace('/admin');
+          router.replace('/bravexyz00');
           setChecking(false);
           return;
         }
@@ -959,7 +959,7 @@ const AdminDashboard = () => {
         if (error || !adminRecord) {
           sessionStorage.removeItem('admin_authenticated');
           Alert.alert('Error', 'Admin account not found');
-          router.replace('/admin');
+          router.replace('/bravexyz00');
           setChecking(false);
           return;
         }
@@ -969,7 +969,7 @@ const AdminDashboard = () => {
             'Access Denied',
             'Your admin account has been deactivated. Please contact the master admin.'
           );
-          router.replace('/admin');
+          router.replace('/bravexyz00');
           setChecking(false);
           return;
         }
@@ -978,7 +978,7 @@ const AdminDashboard = () => {
       } catch (error) {
         console.error('Error checking admin access:', error);
         sessionStorage.removeItem('admin_authenticated');
-        router.replace('/admin');
+        router.replace('/bravexyz00');
         setChecking(false);
       }
     };

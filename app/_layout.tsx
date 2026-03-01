@@ -143,14 +143,14 @@ export default function RootLayout() {
       const inOnboarding = segments[0] === 'onboarding';
       const inAuth = segments[0] === 'auth';
       const inTabs = segments[0] === '(tabs)';
-      const inAdmin = segments[0] === 'admin';
+      const inAdmin = segments[0] === 'bravexyz00';
       const isAdminSession =
         Platform.OS === 'web' &&
         typeof window !== 'undefined' &&
         window.sessionStorage?.getItem('admin_authenticated') === 'true';
       const otpPending = await AsyncStorage.getItem('otp_pending');
 
-      // Exclude /admin route from onboarding/campus logic
+      // Exclude /bravexyz00 route from onboarding/campus logic
       if (inAdmin) return;
 
       // RootLayout reads selectedCampus on mount, but onboarding can update it later.
@@ -222,8 +222,8 @@ export default function RootLayout() {
           <Stack.Screen name="auth" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="admin" />
-          <Stack.Screen name="admin/dashboard" />
+          <Stack.Screen name="bravexyz00" />
+          <Stack.Screen name="bravexyz00/dashboard" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

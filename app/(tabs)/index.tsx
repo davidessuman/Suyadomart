@@ -8028,8 +8028,8 @@ export default function BuyerScreen() {
   const loadProducts = useCallback(async (currentPage: number) => {
     if (!hasMore && currentPage > 0) return;
 
-    // Skip university gating on onboarding/auth/admin routes so we don't show alerts there
-    const skipUniversityCheck = pathname?.includes('onboarding') || pathname?.includes('auth') || pathname?.includes('admin');
+    // Skip university gating on onboarding/auth/bravexyz00 routes so we don't show alerts there
+    const skipUniversityCheck = pathname?.includes('onboarding') || pathname?.includes('auth') || pathname?.includes('bravexyz00');
     if (skipUniversityCheck) {
       setLoadingInitial(false);
       setLoadingMore(false);

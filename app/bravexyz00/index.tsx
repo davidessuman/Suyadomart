@@ -193,7 +193,7 @@ const AdminPage = () => {
       setIsAdmin(true);
       setAuthVisible(false);
       setAuthError('');
-      router.replace('/admin/dashboard');
+      router.replace('/bravexyz00/dashboard');
     } catch {
       setAuthError('Failed to verify OTP. Please try again.');
     }
