@@ -516,8 +516,6 @@ const EventsPanel = () => {
 
         {activeTab === 'Events' ? (
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Events Management</Text>
-            <Text style={styles.subtitle}>Here you can manage all campus events.</Text>
             {loading ? (
               <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 24 }} />
             ) : error ? (
@@ -619,8 +617,6 @@ const EventsPanel = () => {
           </View>
         ) : (
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Announcements Management</Text>
-            <Text style={styles.subtitle}>Here you can manage all campus announcements.</Text>
             {loading ? (
               <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 24 }} />
             ) : error ? (
