@@ -362,13 +362,20 @@ export default function ProductDetailModal({
   };
 
   const displayProduct = productWithSeller || product;
+  if (!displayProduct) return null;
+
   const isService = fullProductData?.category === 'Services';
   const hasSizes = fullProductData?.sizes_available?.length > 0;
   const hasColors = fullProductData?.colors_available?.length > 0;
   const totalStock = getTotalStock();
   const availableStock = getAvailableStock();
   const isOutOfStock = checkIfOutOfStock();
-  const descriptionText = displayProduct.description || displayProduct.title;
+  const descriptionText =
+    (typeof displayProduct.description === 'string' && displayProduct.description.trim().length > 0
+      ? displayProduct.description
+      : typeof displayProduct.title === 'string' && displayProduct.title.trim().length > 0
+        ? displayProduct.title
+        : 'No description available');
   const showDescriptionToggle = descriptionText.trim().length > 180;
   const displayedMedia = useMemo(() => {
     const sourceMedia = fullProductData?.media_urls || displayProduct?.media_urls || [];
@@ -437,8 +444,6 @@ export default function ProductDetailModal({
       animated: true,
     });
   }, [safeMediaIndex, displayedMedia.length]);
-
-  if (!displayProduct) return null;
 
   return (
     <Modal animationType="slide" transparent={true} visible={isVisible} onRequestClose={onClose}>
