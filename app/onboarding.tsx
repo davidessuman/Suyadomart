@@ -139,7 +139,7 @@ export default function OnboardingScreen() {
     try {
       await save(selected);
       // After saving campus, navigate and trigger refresh
-      router.replace({ pathname: '/(tabs)', params: { refresh: '1' } });
+      router.replace({ pathname: '/(tabs)/home', params: { refresh: '1' } });
     } finally {
       setSaving(false);
     }

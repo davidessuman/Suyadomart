@@ -466,7 +466,7 @@ const AuthPage = () => {
         }
 
         await AsyncStorage.removeItem('otp_pending');
-        router.replace('/(tabs)');
+        router.replace('/(tabs)/home');
         resetForm();
       } else {
         toast.success('Email verified! You can now log in.', {
