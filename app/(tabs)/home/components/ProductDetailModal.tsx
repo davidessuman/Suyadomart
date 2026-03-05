@@ -91,6 +91,8 @@ export default function ProductDetailModal({
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const sellerInfoRequestIdRef = useRef(0);
   const mediaFlatListRef = useRef<FlatList<string> | null>(null);
+  const colorSelectionLockRef = useRef(false);
+  const colorSelectionLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaViewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 });
   const onMediaViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
     const firstVisible = viewableItems?.[0];
@@ -120,16 +122,23 @@ export default function ProductDetailModal({
 
   const navigateToColorMedia = useCallback((color: string, productData: any) => {
     const colorMedia = productData?.color_media || {};
-    const mediaForColor = (colorMedia[color] || []).map((url: string) => formatProductMediaUrl(url));
-    const allMedia = (productData?.media_urls || []).map((url: string) => formatProductMediaUrl(url));
+    const mediaForColor = (colorMedia[color] || []).map((url: string) => normalizeMediaKey(formatProductMediaUrl(url)));
+    const allMedia = (productData?.media_urls || []).map((url: string) => normalizeMediaKey(formatProductMediaUrl(url)));
 
     if (mediaForColor.length > 0 && allMedia.length > 0) {
       const firstColorMediaIndex = allMedia.findIndex((url: string) => mediaForColor.includes(url));
       if (firstColorMediaIndex !== -1) {
         setCurrentMediaIndex(firstColorMediaIndex);
+
+        setTimeout(() => {
+          mediaFlatListRef.current?.scrollToIndex({
+            index: firstColorMediaIndex,
+            animated: true,
+          });
+        }, 0);
       }
     }
-  }, [formatProductMediaUrl]);
+  }, [formatProductMediaUrl, normalizeMediaKey]);
 
   const fetchFullProductData = useCallback(async (productId: string) => {
     try {
@@ -213,6 +222,11 @@ export default function ProductDetailModal({
 
     fetchSellerInfo();
     fetchFullProductData(product.id);
+    if (colorSelectionLockTimerRef.current) {
+      clearTimeout(colorSelectionLockTimerRef.current);
+      colorSelectionLockTimerRef.current = null;
+    }
+    colorSelectionLockRef.current = false;
     setCurrentMediaIndex(0);
     setSelectedColor('');
     setSelectedSize('');
@@ -402,6 +416,7 @@ export default function ProductDetailModal({
 
   useEffect(() => {
     if (!hasColors || displayedMedia.length === 0 || mediaToColorMap.size === 0) return;
+    if (colorSelectionLockRef.current) return;
 
     const currentMediaUrl = displayedMedia[safeMediaIndex];
     if (!currentMediaUrl) return;
@@ -541,47 +556,6 @@ export default function ProductDetailModal({
                   </View>
                 )}
 
-                {hasColors && (
-                  <View style={[styles.colorMediaNavigation, { width: mediaWidth }]}>
-                    <Text style={[styles.colorNavTitle, { color: theme.text }]}>View by Color:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.colorNavChips}>
-                      {fullProductData.colors_available.map((color: string) => {
-                        const colorQty = fullProductData.color_stock?.[color] || 0;
-                        const isColorOutOfStock = parseInt(colorQty) === 0;
-                        const isSelected = selectedColor === color;
-
-                        return (
-                          <TouchableOpacity
-                            key={color}
-                            style={[
-                              styles.colorNavChip,
-                              { backgroundColor: theme.surface },
-                              isSelected && [styles.colorNavChipSelected, { borderColor: theme.primary }],
-                              isColorOutOfStock && { backgroundColor: theme.errorLight }
-                            ]}
-                            onPress={() => {
-                              setSelectedColor(color);
-                              navigateToColorMedia(color, fullProductData);
-                            }}
-                          >
-                            <Text style={[
-                              styles.colorNavChipText,
-                              { color: theme.text },
-                              isSelected && [styles.colorNavChipTextSelected, { color: theme.primary }],
-                              isColorOutOfStock && { color: theme.error }
-                            ]}>
-                              {color}
-                            </Text>
-                            {isColorOutOfStock && (
-                              <Ionicons name="close-circle" size={12} color={theme.error} />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-                )}
-
                 {displayedMedia.length > 1 && (
                   <View style={styles.mediaPaginationDots}>
                     {displayedMedia.map((_: any, index: number) => (
@@ -595,6 +569,86 @@ export default function ProductDetailModal({
                         ]}
                       />
                     ))}
+                  </View>
+                )}
+
+                {hasColors && (
+                  <View style={styles.modalVariantSection}>
+                    <Text style={[styles.modalVariantTitle, { color: theme.text }]}>Select Color:</Text>
+                    <View style={styles.colorSelectionGridModern}>
+                      {fullProductData.colors_available.map((color: string) => {
+                        const colorMedia = fullProductData.color_media?.[color];
+                        const isSelected = selectedColor === color;
+
+                        return (
+                          <TouchableOpacity
+                            key={color}
+                            style={[
+                              styles.colorOptionModernModal,
+                              isSelected && styles.colorOptionModernSelectedModal,
+                              { borderColor: isSelected ? theme.primary : theme.border }
+                            ]}
+                            onPress={() => {
+                              if (colorSelectionLockTimerRef.current) {
+                                clearTimeout(colorSelectionLockTimerRef.current);
+                              }
+                              colorSelectionLockRef.current = true;
+                              colorSelectionLockTimerRef.current = setTimeout(() => {
+                                colorSelectionLockRef.current = false;
+                                colorSelectionLockTimerRef.current = null;
+                              }, 700);
+
+                              setSelectedColor(color);
+                              navigateToColorMedia(color, fullProductData);
+                            }}
+                          >
+                            <View style={styles.colorPreviewModernModal}>
+                              {colorMedia && colorMedia.length > 0 ? (
+                                <Image
+                                  source={{ uri: colorMedia[0] || 'https://via.placeholder.com/400' }}
+                                  style={styles.colorPreviewImageModal}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <View style={[styles.colorCircleModernModal, { backgroundColor: color }]} />
+                              )}
+
+                              {isSelected && (
+                                <View style={styles.colorSelectionCheckModal}>
+                                  <Ionicons name="checkmark" size={16} color="#fff" />
+                                </View>
+                              )}
+                            </View>
+
+                            <Text
+                              style={[
+                                styles.colorTextModernModal,
+                                {
+                                  color: isSelected ? theme.primary : theme.text,
+                                  fontWeight: isSelected ? '600' : '400'
+                                }
+                              ]}
+                            >
+                              {color}
+                            </Text>
+
+                            {fullProductData.color_stock?.[color] && (
+                              <Text
+                                style={[
+                                  styles.colorStockTextModal,
+                                  {
+                                    color: fullProductData.color_stock[color] > 0 ? '#4CAF50' : '#FF3B30',
+                                    backgroundColor: fullProductData.color_stock[color] > 0 ? '#4CAF5020' : '#FF3B3020'
+                                  }
+                                ]}
+                              >
+                                {fullProductData.color_stock[color] > 0 ? `${fullProductData.color_stock[color]} left` : 'Out of stock'}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
                 )}
               </View>
@@ -703,57 +757,6 @@ export default function ProductDetailModal({
                               { color: isSizeOutOfStock ? theme.error : theme.textSecondary }
                             ]}>
                               {isSizeOutOfStock ? 'Out of stock' : `${sizeQty} available`}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {hasColors && (
-                  <View style={[styles.colorSelectionSection, { backgroundColor: theme.surface }]}>
-                    <View style={styles.sectionHeader}>
-                      <Ionicons name="color-palette-outline" size={20} color={theme.text} />
-                      <Text style={[styles.sectionTitle, { color: theme.text }]}>Select Color</Text>
-                      <Text style={[styles.stockLabel, { color: theme.textSecondary }]}>(Stock shown per color)</Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.colorChips}>
-                      {fullProductData.colors_available.map((color: string) => {
-                        const colorQty = fullProductData.color_stock?.[color] || 0;
-                        const isColorOutOfStock = parseInt(colorQty) === 0;
-                        const isSelected = selectedColor === color;
-
-                        return (
-                          <TouchableOpacity
-                            key={color}
-                            style={[
-                              styles.colorChip,
-                              { backgroundColor: theme.card },
-                              isSelected && [styles.colorChipSelected, { borderColor: theme.primary }],
-                              isColorOutOfStock && [styles.colorChipOutOfStock, { backgroundColor: theme.errorLight }]
-                            ]}
-                            onPress={() => {
-                              if (!isColorOutOfStock) {
-                                setSelectedColor(color);
-                                navigateToColorMedia(color, fullProductData);
-                              }
-                            }}
-                            disabled={isColorOutOfStock}
-                          >
-                            <Text style={[
-                              styles.colorChipText,
-                              { color: theme.text },
-                              isSelected && [styles.colorChipTextSelected, { color: theme.primary }],
-                              isColorOutOfStock && { color: theme.error }
-                            ]}>
-                              {color}
-                            </Text>
-                            <Text style={[
-                              styles.colorStockText,
-                              { color: isColorOutOfStock ? theme.error : theme.textSecondary }
-                            ]}>
-                              {isColorOutOfStock ? 'Out of stock' : `${colorQty} available`}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -1153,10 +1156,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  colorSelectionSection: {
-    borderRadius: 12,
-    padding: 15,
+  modalVariantSection: {
     marginBottom: 15,
+  },
+
+  modalVariantTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+
+  colorSelectionGridModern: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -6,
+  },
+
+  colorOptionModernModal: {
+    width: 90,
+    alignItems: 'center',
+    marginHorizontal: 6,
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+
+  colorOptionModernSelectedModal: {
+    backgroundColor: 'rgba(246, 139, 30, 0.1)',
+  },
+
+  colorPreviewModernModal: {
+    position: 'relative',
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+
+  colorPreviewImageModal: {
+    width: '100%',
+    height: '100%',
+  },
+
+  colorCircleModernModal: {
+    width: '100%',
+    height: '100%',
+  },
+
+  colorSelectionCheckModal: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#4CAF50',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  colorTextModernModal: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+
+  colorStockTextModal: {
+    fontSize: 9,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 2,
   },
 
   colorChips: {

@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
 
   sellerProductsGrid: { paddingHorizontal: 16, paddingVertical: 14, paddingBottom: 24 },
 
-  sellerProductsRow: { justifyContent: 'space-between' },
+  sellerProductsRow: { justifyContent: 'flex-start', gap: 12 },
 
   sellerProductCard: {
     borderRadius: 14,
