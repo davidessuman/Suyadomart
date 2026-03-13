@@ -109,3 +109,5 @@ export const SearchBar = ({
     </View>
   );
 };
+
+    export default SearchBar;

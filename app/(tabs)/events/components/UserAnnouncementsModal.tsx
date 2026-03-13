@@ -166,3 +166,5 @@ export const UserAnnouncementsModal = ({
     </Modal>
   );
 };
+
+export default UserAnnouncementsModal;

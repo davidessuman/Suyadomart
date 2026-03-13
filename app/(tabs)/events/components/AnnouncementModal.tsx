@@ -728,3 +728,5 @@ export const AnnouncementModal = ({
     </>
   );
 };
+
+export default AnnouncementModal;

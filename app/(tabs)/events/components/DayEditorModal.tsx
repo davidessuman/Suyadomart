@@ -283,3 +283,5 @@ export const DayEditorModal = ({
     </Modal>
   );
 };
+
+export default DayEditorModal;

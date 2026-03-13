@@ -16,6 +16,8 @@ type Props = {
   showDeleteConfirmation: (announcementId: string) => void;
 };
 
+export default AnnouncementDetailsModal;
+
 export function AnnouncementDetailsModal({
   showAnnouncementDetails,
   setShowAnnouncementDetails,

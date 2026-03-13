@@ -161,3 +161,4 @@ export const MultiDayCalendar = ({
     </View>
   );
 };
+export default MultiDayCalendar;

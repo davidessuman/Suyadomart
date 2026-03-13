@@ -145,4 +145,5 @@ export const ActionMenuModal = ({
       </View>
     </Modal>
   );
-};
+  }; // End of ActionMenuModal component
+  export default ActionMenuModal;

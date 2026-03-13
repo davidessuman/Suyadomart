@@ -103,18 +103,7 @@ export default function UniversitySection({
       </View>
 
       {selectedSchool && (
-        <View style={[styles.selectedPreview, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}> 
-          <View style={styles.selectedPreviewContent}>
-            <Ionicons name="checkmark-circle" size={24} color={colors.success} />
-            <View style={styles.selectedPreviewInfo}>
-              <Text style={[styles.selectedPreviewLabel, { color: colors.textSecondary }]}>Selected University</Text>
-              <Text style={[styles.selectedPreviewValue, { color: colors.text }]}>{selectedSchool}</Text>
-            </View>
-            <TouchableOpacity onPress={() => setSelectedSchool('')}>
-              <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
+        null
       )}
     </>
   );

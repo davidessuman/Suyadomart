@@ -66,3 +66,5 @@ export const UserEventsModal = ({
     </Modal>
   );
 };
+
+export default UserEventsModal;

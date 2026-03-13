@@ -29,6 +29,8 @@ type Props = {
   editingReminderDate: string | null;
 };
 
+export default ReminderModal;
+
 export function ReminderModal({
   reminderModalVisible,
   setReminderModalVisible,

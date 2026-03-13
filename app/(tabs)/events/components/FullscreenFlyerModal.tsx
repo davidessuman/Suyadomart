@@ -38,3 +38,5 @@ export const FullscreenFlyerModal = ({
     </Modal>
   );
 };
+
+export default FullscreenFlyerModal;

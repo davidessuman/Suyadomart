@@ -361,3 +361,5 @@ export function EventDetailsModal({
     </Modal>
   );
 }
+
+export default EventDetailsModal;

@@ -237,3 +237,5 @@ export const AdvancedTimePicker = ({
     </>
   );
 };
+
+export default AdvancedTimePicker;

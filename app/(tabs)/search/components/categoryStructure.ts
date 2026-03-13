@@ -21,3 +21,4 @@ export const categoryStructure = {
   ],
   Other: ['Everything else'],
 };
+export default categoryStructure;

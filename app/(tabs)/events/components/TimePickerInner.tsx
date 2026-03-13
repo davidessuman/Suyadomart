@@ -192,3 +192,5 @@ export const TimePickerInner = ({
     </>
   );
 };
+
+  export default TimePickerInner;

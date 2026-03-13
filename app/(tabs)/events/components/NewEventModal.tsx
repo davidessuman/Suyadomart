@@ -659,3 +659,5 @@ export const NewEventModal = ({
     </Modal>
   );
 };
+
+export default NewEventModal;

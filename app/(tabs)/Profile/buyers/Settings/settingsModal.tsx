@@ -380,6 +380,11 @@ export default function BuyerSettingsModal({
                   elevation: 8,
                 }}
               >
+                {selectedSchool ? (
+                  <View style={{ marginBottom: 8, alignItems: 'center' }}>
+                    <Text style={[styles.selectedPreviewValue, { color: colors.text, fontSize: 14 }]} numberOfLines={1}>{selectedSchool}</Text>
+                  </View>
+                ) : null}
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity
                     activeOpacity={0.9}
