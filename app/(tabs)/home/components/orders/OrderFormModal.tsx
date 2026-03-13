@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   useWindowDimensions,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
@@ -55,7 +56,7 @@ interface OrderFormModalProps {
   initialSelectedSize?: string | null;
   initialQuantity?: number | null;
   theme: any;
-  styles: any;
+  styles?: any;
 }
 
 const isVideoUrl = (url: string): boolean => {
@@ -83,7 +84,7 @@ const OrderFormModal: React.FC<OrderFormModalProps> = ({
   initialSelectedSize,
   initialQuantity,
   theme,
-  styles,
+  styles: stylesProp,
 }) => {
   const { width, height } = useWindowDimensions();
   const isLargeScreen = width >= 768;
@@ -106,6 +107,85 @@ const OrderFormModal: React.FC<OrderFormModalProps> = ({
   const [availableStock, setAvailableStock] = useState<number>(0);
   const [colorSpecificMedia, setColorSpecificMedia] = useState<string[]>([]);
   const [currentPreviewImageIndex, setCurrentPreviewImageIndex] = useState(0);
+
+  const defaultStyles = StyleSheet.create({
+    orderFormOverlay: { flex: 1 },
+    orderFormContainer: { flex: 1 },
+    orderFormHeader: { height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
+    orderFormCloseButton: { padding: 8 },
+    orderFormTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', flex: 1 },
+    orderFormContent: { padding: 12 },
+    orderFormSection: { marginBottom: 16 },
+    orderFormSectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+    productPreview: { flexDirection: 'row', padding: 12, borderRadius: 8 },
+    productImageContainer: { width: 120, height: 120, marginRight: 12 },
+    productPreviewImage: { width: '100%', height: '100%', borderRadius: 8 },
+    imageNavButton: { position: 'absolute', top: '45%', padding: 8, borderRadius: 20 },
+    prevImageButton: { left: 8 },
+    nextImageButton: { right: 8 },
+    imageCounter: { position: 'absolute', right: 8, bottom: 8, padding: 6, borderRadius: 12 },
+    imageCounterText: { color: '#fff', fontSize: 12 },
+    productPreviewInfo: { flex: 1 },
+    productPreviewTitle: { fontSize: 16, fontWeight: '700' },
+    productPreviewPrice: { fontSize: 16, fontWeight: '700' },
+    colorIndicatorContainer: { marginTop: 8 },
+    colorIndicatorLabel: { fontSize: 12 },
+    colorIndicatorChip: { padding: 6, borderRadius: 6 },
+    colorIndicatorText: { fontSize: 12 },
+    colorMediaCount: { fontSize: 12 },
+    selectionGroup: { marginTop: 12 },
+    selectionLabel: { marginBottom: 8 },
+    selectionOptions: { flexDirection: 'row', flexWrap: 'wrap' },
+    selectionOption: { padding: 8, borderRadius: 8, marginRight: 8, marginBottom: 8, borderWidth: 1 },
+    selectionOptionSelected: { borderWidth: 2 },
+    selectionOptionDisabled: { opacity: 0.5 },
+    selectionOptionText: { fontSize: 14 },
+    selectionOptionTextSelected: { fontWeight: '700' },
+    stockLabelSmall: { fontSize: 12 },
+    quantitySelector: { flexDirection: 'row', alignItems: 'center' },
+    quantityButton: { padding: 8, borderRadius: 8, borderWidth: 1 },
+    quantityDisplay: { paddingHorizontal: 12 },
+    quantityText: { fontSize: 16 },
+    stockText: { marginLeft: 8 },
+    selectedOptionsSummary: { padding: 8, borderRadius: 8 },
+    selectedOptionsTitle: { fontSize: 14, fontWeight: '700' },
+    selectedOptionsRow: { flexDirection: 'row', flexWrap: 'wrap' },
+    selectedOptionChip: { padding: 6, borderRadius: 8, marginRight: 8, marginTop: 8 },
+    selectedOptionText: { fontSize: 12 },
+    cartSummary: { padding: 8, borderRadius: 8 },
+    cartSummaryItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+    cartSummaryItemInfo: { flex: 1 },
+    cartSummaryItemTitle: { fontSize: 14 },
+    cartSummaryItemQty: { fontSize: 12 },
+    cartSummaryItemPrice: { fontSize: 14, fontWeight: '700' },
+    formGroup: { marginBottom: 12 },
+    formLabel: { marginBottom: 6 },
+    formInput: { padding: 10, borderRadius: 8, borderWidth: 1 },
+    phoneInputContainer: { flexDirection: 'row', alignItems: 'center' },
+    countryCodeContainer: { paddingHorizontal: 8, paddingVertical: 10, borderRadius: 8, borderWidth: 1, marginRight: 8 },
+    countryCodeText: { fontSize: 14 },
+    phoneInput: { flex: 1 },
+    errorText: { color: '#ff3b30' },
+    helperText: { fontSize: 12 },
+    deliveryOption: { padding: 12, borderRadius: 8, borderWidth: 1, marginBottom: 8 },
+    deliveryOptionSelected: { borderWidth: 2 },
+    deliveryOptionRadio: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, marginRight: 12 },
+    deliveryOptionRadioSelected: { width: 12, height: 12, borderRadius: 6 },
+    deliveryOptionContent: { flexDirection: 'row', alignItems: 'center' },
+    deliveryOptionText: { marginLeft: 8 },
+    deliveryOptionTitle: { fontSize: 14 },
+    deliveryOptionDescription: { fontSize: 12 },
+    orderTotalSection: { padding: 12, borderRadius: 8 },
+    orderTotalText: { fontSize: 16, fontWeight: '700' },
+    orderSummaryText: { fontSize: 12 },
+    orderFormFooter: { padding: 12 },
+    submitOrderButton: { padding: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+    submitOrderButtonDisabled: { opacity: 0.6 },
+    submitOrderLoading: { flexDirection: 'row', alignItems: 'center' },
+    submitOrderButtonText: { color: '#fff', marginLeft: 8, fontWeight: '700' },
+  });
+
+  const styles = stylesProp && Object.keys(stylesProp).length ? stylesProp : defaultStyles;
 
   const loadColorSpecificMedia = useCallback((productData: any, color: string) => {
     if (!productData || !color) {

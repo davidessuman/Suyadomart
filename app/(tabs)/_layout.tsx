@@ -1,10 +1,12 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import CartProvider from '../cart/CartProvider';
 
 export default function TabLayout() {
   return (
-    <Tabs
+    <CartProvider>
+      <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#FF9900', // Brand orange
         tabBarInactiveTintColor: '#888',
@@ -61,5 +63,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </CartProvider>
   );
 }

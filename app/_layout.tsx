@@ -1,63 +1,4 @@
 import React, { useEffect, useState } from 'react';
-// Web Push Notification logic (web only)
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
-  // Import supabase client from the same instance as the app
-  const { supabase } = require('@/lib/supabase');
-  window.registerPushServiceWorker = async function () {
-    console.log('[Push] Starting registration...');
-    try {
-      // Register the service worker
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      console.log('[Push] Service worker registered:', reg);
-      // Request notification permission
-      console.log('[Push] About to call Notification.requestPermission()');
-      let permission;
-      try {
-        permission = await Notification.requestPermission();
-        console.log('[Push] Notification permission:', permission);
-      } catch (err) {
-        console.error('[Push] Notification.requestPermission() error:', err);
-        return null;
-      }
-      if (permission !== 'granted') {
-        alert('Notification permission denied.');
-        return null;
-      }
-      if (permission !== 'granted') {
-        alert('Notification permission denied.');
-        return null;
-      }
-      // Subscribe to push
-      const subscription = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: 'BJBZSDczPaVSiRj49xRx35WXIueIqgYInu7mzMP0XBlAog-zfUXvDyYony_yBUwG4RKURnYTcqXWKNtFgR5KTnc'
-      });
-      console.log('[Push] Subscription:', subscription);
-      // Get user from supabase client
-      const { data: { user } } = await supabase.auth.getUser();
-      const user_id = user ? user.id : null;
-      console.log('[Push] user_id:', user_id);
-      // Use Vercel endpoint in production, localhost in dev
-      // Always use the deployed Vercel endpoint for both production and development
-      const backendUrl = 'https://www.suyadomart.com/api/save-subscription';
-      const resp = await fetch(backendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id,
-          endpoint: subscription.endpoint,
-          keys: subscription.toJSON().keys
-        })
-      });
-      const respData = await resp.json();
-      console.log('[Push] Subscription save response:', resp.status, respData);
-      return subscription;
-    } catch (err) {
-      console.error('[Push] Registration failed:', err);
-      return null;
-    }
-  };
-}
 import {
   DarkTheme,
   DefaultTheme,
@@ -84,9 +25,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.setIsPushSubscribed = setIsSubscribed;
-    }
+    // no-op: push subscription support removed
   }, []);
   const colorScheme = useColorScheme();
   const router = useRouter();

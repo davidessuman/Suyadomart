@@ -75,12 +75,30 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadCart]);
 
   const addToCart = useCallback(async (product: any, selectedColor?: string, selectedSize?: string, quantity: number = 1) => {
+    // Debug: trace calls from UI (helpful for diagnosing profile vs home differences)
+    // eslint-disable-next-line no-console
+    console.log('CartProvider.addToCart called', { productId: product?.id, quantity, selectedColor, selectedSize });
     try {
       const userId = await getCurrentUserId();
+      // eslint-disable-next-line no-console
+      console.log('CartProvider.addToCart userId', userId);
       if (!userId) throw new Error('User not authenticated');
 
       // Check if product already exists in cart (by product_id only)
-      const existingItem = cartItems.find(item => item.product.id === product.id);
+      // Debug: show current cart item ids and the product id being added
+      // eslint-disable-next-line no-console
+      console.log('CartProvider.addToCart current cart ids', cartItems.map(i => i.product?.id));
+      // eslint-disable-next-line no-console
+      console.log('CartProvider.addToCart incoming product id', product?.id);
+      const existingItem = cartItems.find(item => {
+        // eslint-disable-next-line no-console
+        // log each comparison for deeper visibility when debugging
+        console.log('Comparing', item.product?.id, '===', product?.id);
+        return item.product?.id === product.id;
+      });
+
+      // eslint-disable-next-line no-console
+      console.log('CartProvider.addToCart existingItem', !!existingItem);
 
       if (existingItem) {
         throw new Error('Product is already in cart');
@@ -97,7 +115,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           selected_size: selectedSize,
         });
 
-      if (error) throw error;
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('CartProvider.addToCart supabase insert error', error);
+        throw error;
+      }
 
       // Reload cart from database to ensure consistency
       await loadCart();
@@ -110,8 +132,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         added_at: new Date().toISOString(),
       }]);
 
+      // eslint-disable-next-line no-console
+      console.log('CartProvider.addToCart succeeded', { productId: product?.id });
+
       return updatedCart;
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('CartProvider.addToCart caught error', error);
       throw error;
     }
   }, [cartItems, loadCart]);

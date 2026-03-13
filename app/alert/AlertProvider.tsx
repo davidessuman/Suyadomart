@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+// Use a DOM portal on web so alerts render above other modals
+let ReactDOM: any = null;
+if (Platform.OS === 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ReactDOM = require('react-dom');
+}
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'react-native';
 
@@ -38,6 +44,8 @@ export interface AlertData {
   onConfirm?: () => void;
   onCancel?: () => void;
   onClose?: () => void;
+  // Optional theme can be provided to match caller's modal/theme styling
+  theme?: any;
 }
 
 interface AlertContextType {
@@ -111,66 +119,136 @@ export const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     removeAlert(alert.id);
   }, [removeAlert]);
 
+  const portalTheme = currentAlert?.theme || themeColors;
+
   return (
     <AlertContext.Provider value={{ showAlert, showConfirmation }}>
       {children}
-      <Modal
-        visible={!!currentAlert}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        presentationStyle="overFullScreen"
-        onRequestClose={() => currentAlert && handleClose(currentAlert)}
-      >
-        <View style={[styles.overlay, { backgroundColor: themeColors.modalOverlay, zIndex: 9999 }]}> 
-          <View style={[styles.container, { backgroundColor: themeColors.card, zIndex: 10000 }]}> 
-            {currentAlert && (
-              <>
-                <View style={[styles.header, { backgroundColor: getAlertStyles(currentAlert.type).backgroundColor }]}> 
-                  <Ionicons 
-                    name={getAlertStyles(currentAlert.type).icon as any} 
-                    size={32} 
-                    color="#FFF" 
-                  />
-                  <Text style={styles.title}>{currentAlert.title}</Text>
-                </View>
-                <View style={styles.content}>
-                  <Text style={[styles.message, { color: themeColors.text }]}>{currentAlert.message}</Text>
-                </View>
-                <View style={[styles.actions, { borderTopColor: themeColors.border }]}> 
-                  {currentAlert.type === 'confirm' ? (
-                    <>
-                      <TouchableOpacity
-                        style={[styles.button, styles.cancelButton, { backgroundColor: themeColors.inputBackground }]}
-                        onPress={() => handleCancel(currentAlert)}
+      {Platform.OS === 'web' ? (
+        // Render portal content directly into document.body so it sits above other modals
+        ReactDOM && currentAlert
+          ? ReactDOM.createPortal(
+              <div style={{ position: 'fixed', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2147483647, backgroundColor: portalTheme.modalOverlay }}>
+                <div style={{ width: '100%', maxWidth: 400, borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', backgroundColor: portalTheme.modalBackground || portalTheme.card }}>
+                  <div style={{ display: 'flex', alignItems: 'center', padding: 20, gap: 12, backgroundColor: getAlertStyles(currentAlert.type).backgroundColor }}>
+                    <Ionicons name={getAlertStyles(currentAlert.type).icon as any} size={32} color="#FFF" />
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#FFF', flex: 1 }}>{currentAlert.title}</div>
+                  </div>
+                  <div style={{ padding: 20 }}>
+                    <div style={{ color: portalTheme.text || themeColors.text, fontSize: 16, lineHeight: '24px', textAlign: 'center' }}>{currentAlert.message}</div>
+                  </div>
+                  <div style={{ display: 'flex', borderTop: `1px solid ${portalTheme.border || themeColors.border}`, padding: 16, gap: 12 }}>
+                    {currentAlert.type === 'confirm' ? (
+                      <>
+                        <button
+                          style={{
+                            flex: 1,
+                            padding: '14px',
+                            background: portalTheme.surface || themeColors.surface,
+                            border: `1px solid ${portalTheme.border || themeColors.border}`,
+                            cursor: 'pointer',
+                            borderRadius: 10,
+                          }}
+                          onClick={() => handleCancel(currentAlert)}
+                        >
+                          <span style={{ color: portalTheme.text || themeColors.text }}>{currentAlert.cancelText || 'Cancel'}</span>
+                        </button>
+                        <button
+                          style={{
+                            flex: 1,
+                            padding: '14px',
+                            background: portalTheme.primary || themeColors.primary,
+                            color: '#000',
+                            border: 'none',
+                            cursor: 'pointer',
+                            borderRadius: 10,
+                          }}
+                          onClick={() => handleConfirm(currentAlert)}
+                        >
+                          <span style={{ fontWeight: 600 }}>{currentAlert.confirmText || 'OK'}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        style={{
+                          width: '100%',
+                          padding: '14px',
+                          background: portalTheme.primary || themeColors.primary,
+                          color: '#000',
+                          border: 'none',
+                          cursor: 'pointer',
+                          borderRadius: 10,
+                        }}
+                        onClick={() => handleClose(currentAlert)}
                       >
-                        <Text style={[styles.buttonText, styles.cancelButtonText, { color: themeColors.info }]}>
-                          {currentAlert.cancelText || 'Cancel'}
-                        </Text>
-                      </TouchableOpacity>
+                        OK
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )
+          : null
+      ) : (
+        <Modal
+          visible={!!currentAlert}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          presentationStyle="overFullScreen"
+          onRequestClose={() => currentAlert && handleClose(currentAlert)}
+        >
+          <View style={[styles.overlay, { backgroundColor: portalTheme.modalOverlay, zIndex: 99999 }]}> 
+            <View style={[styles.container, { backgroundColor: portalTheme.modalBackground || portalTheme.card, zIndex: 100000, borderColor: portalTheme.border || themeColors.border }]}> 
+              {currentAlert && (
+                <>
+                  <View style={[styles.header, { backgroundColor: getAlertStyles(currentAlert.type).backgroundColor }]}> 
+                    <Ionicons 
+                      name={getAlertStyles(currentAlert.type).icon as any} 
+                      size={32} 
+                      color="#FFF" 
+                    />
+                    <Text style={styles.title}>{currentAlert.title}</Text>
+                  </View>
+                  <View style={styles.content}>
+                    <Text style={[styles.message, { color: portalTheme.text || themeColors.text }]}>{currentAlert.message}</Text>
+                  </View>
+                  <View style={[styles.actions, { borderTopColor: portalTheme.border || themeColors.border }]}> 
+                    {currentAlert.type === 'confirm' ? (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.button, styles.cancelButton, { backgroundColor: portalTheme.surface || themeColors.surface, borderColor: portalTheme.border || themeColors.border }]}
+                          onPress={() => handleCancel(currentAlert)}
+                        >
+                          <Text style={[styles.buttonText, styles.cancelButtonText, { color: portalTheme.text || themeColors.text }]}>
+                            {currentAlert.cancelText || 'Cancel'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.button, styles.confirmButton, { backgroundColor: portalTheme.primary || themeColors.primary }]}
+                          onPress={() => handleConfirm(currentAlert)}
+                        >
+                          <Text style={[styles.buttonText, styles.confirmButtonText, { color: '#000' }]}>
+                            {currentAlert.confirmText || 'OK'}
+                          </Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
                       <TouchableOpacity
-                        style={[styles.button, styles.confirmButton, { backgroundColor: themeColors.info }]}
-                        onPress={() => handleConfirm(currentAlert)}
+                        style={[styles.button, { backgroundColor: portalTheme.primary || themeColors.primary }]}
+                        onPress={() => handleClose(currentAlert)}
                       >
-                        <Text style={[styles.buttonText, styles.confirmButtonText]}>
-                          {currentAlert.confirmText || 'OK'}
-                        </Text>
+                        <Text style={[styles.buttonText, { color: '#000' }]}>OK</Text>
                       </TouchableOpacity>
-                    </>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.button, { backgroundColor: getAlertStyles(currentAlert.type).backgroundColor }]}
-                      onPress={() => handleClose(currentAlert)}
-                    >
-                      <Text style={[styles.buttonText, { color: '#FFF' }]}>OK</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            )}
+                    )}
+                  </View>
+                </>
+              )}
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </AlertContext.Provider>
   );
 };

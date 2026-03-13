@@ -81,6 +81,7 @@ const SellerProfileModal: React.FC<SellerProfileModalProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [profilePhotoVisible, setProfilePhotoVisible] = useState(false);
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
 
   const requireAuth = (action: string = 'continue') => {
     showAlert('Login Required', `Please log in or sign up to ${action}.`, [
@@ -105,7 +106,7 @@ const SellerProfileModal: React.FC<SellerProfileModalProps> = ({
           .single();
         const { data: rawProducts } = await supabase
           .from('products')
-          .select('id, title, description, price, original_price, quantity, media_urls')
+          .select('id, title, description, price, original_price, quantity, media_urls, seller_id')
           .eq('seller_id', sellerId)
           .order('created_at', { ascending: false });
 
@@ -187,12 +188,23 @@ const SellerProfileModal: React.FC<SellerProfileModalProps> = ({
       requireAuth('add items to your cart');
       return;
     }
+    setAddingProductId(product.id);
 
     try {
       await onAddToCart(product);
       showAlert('Success', 'Product added to cart!');
-    } catch {
-      showAlert('Sorry', 'Product is already in cart');
+    } catch (error: any) {
+      // Log and display the actual error message when available.
+      // eslint-disable-next-line no-console
+      console.error('addToCart error', error);
+      const msg = (error && (error.message || String(error))) || 'Failed to add product to cart';
+      if (String(msg).toLowerCase().includes('already in cart')) {
+        showAlert('Already in Cart', 'This product is already in your cart. You can update the quantity from the cart.');
+      } else {
+        showAlert('Error', msg);
+      }
+    } finally {
+      setAddingProductId(null);
     }
   };
 
@@ -342,9 +354,14 @@ const SellerProfileModal: React.FC<SellerProfileModalProps> = ({
                               e.stopPropagation();
                               handleAddToCart(item);
                             }}
+                            disabled={addingProductId === item.id}
                           >
-                            <Ionicons name="cart-outline" size={16} color="#fff" />
-                            <Text style={styles.sellerActionButtonText}>Cart</Text>
+                            {addingProductId === item.id ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <Ionicons name="cart-outline" size={16} color="#fff" />
+                            )}
+                            <Text style={styles.sellerActionButtonText}>{addingProductId === item.id ? 'Adding...' : 'Cart'}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.sellerProductGridOrderButton, { backgroundColor: '#FF4081' }]}
