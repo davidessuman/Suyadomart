@@ -1,5 +1,5 @@
 import React from 'react';
-import { ImageBackground, View, Text, TouchableOpacity } from 'react-native';
+import { ImageBackground, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 type Props = {
@@ -15,11 +15,11 @@ export default function DisplaySellerSection({ styles, colors, profile, shopData
   return (
     <ImageBackground
       source={{ uri: SELLER_BACKGROUND_URL }}
-      style={styles.sellerBackground}
+      style={[styles.sellerBackground, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}
       resizeMode="cover"
     >
       <View style={[styles.sellerOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]} />
-      <View style={styles.sellerContent}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.sellerContent} showsVerticalScrollIndicator={false}>
         <View style={styles.sellerHeader}>
           <View style={[styles.sellerBadge, { backgroundColor: colors.primary }]}> 
             <MaterialCommunityIcons name="store-check" size={24} color="white" />
@@ -45,7 +45,7 @@ export default function DisplaySellerSection({ styles, colors, profile, shopData
           <MaterialCommunityIcons name="view-dashboard" size={24} color="white" />
           <Text style={styles.dashboardButtonText}>Open Seller Dashboard</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </ImageBackground>
   );
 }

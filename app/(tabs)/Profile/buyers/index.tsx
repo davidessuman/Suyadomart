@@ -272,7 +272,7 @@ export default function ProfileScreen() {
       if (data?.full_name) setFullName(data.full_name);
 
       // If user is already a seller, automatically show seller section and load shop data
-      if (data?.is_seller === true) {
+      if (data?.is_seller) {
         setShowSellerSection(true);
         // Load shop data for seller section
         await loadShopData(userId);
@@ -721,26 +721,26 @@ export default function ProfileScreen() {
     );
   }
 
-  const isSeller = profile?.is_seller === true;
+  const isSeller = !!profile?.is_seller;
   const displaySellerSection = isSeller && showSellerSection;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <View style={styles.userContainer}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
-          <TouchableOpacity 
-            style={[styles.settingsButton, { backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }]}
-            onPress={() => setSettingsModal(true)}
-          >
-            <Ionicons name="settings-outline" size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+        {!displaySellerSection ? (
+          <>
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
+              <TouchableOpacity 
+                style={[styles.settingsButton, { backgroundColor: isDarkMode ? '#334155' : '#e2e8f0' }]}
+                onPress={() => setSettingsModal(true)}
+              >
+                <Ionicons name="settings-outline" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {!displaySellerSection ? (
-            <>
+            <ScrollView showsVerticalScrollIndicator={false}>
               <BuyerProfileCard
                 styles={styles}
                 colors={colors}
@@ -755,18 +755,18 @@ export default function ProfileScreen() {
                 setSettingsModal={setSettingsModal}
                 setSellerFormModal={setSellerFormModal}
               />
-            </>
-          ) : (
-            <DisplaySellerSection
-              styles={styles}
-              colors={colors}
-              profile={profile}
-              shopData={shopData}
-              SELLER_BACKGROUND_URL={SELLER_BACKGROUND_URL}
-              router={router}
-            />
-          )}
-        </ScrollView>
+            </ScrollView>
+          </>
+        ) : (
+          <DisplaySellerSection
+            styles={styles}
+            colors={colors}
+            profile={profile}
+            shopData={shopData}
+            SELLER_BACKGROUND_URL={SELLER_BACKGROUND_URL}
+            router={router}
+          />
+        )}
       </View>
 
       {/* Settings Modal */}
@@ -925,7 +925,7 @@ const styles = StyleSheet.create({
   buyerText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   sellerButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 16, marginTop: 24 },
   sellerButtonText: { color: 'white', fontSize: 16, fontWeight: '600', marginLeft: 8 },
-  sellerBackground: { width: '100%', height: height * 0.85, justifyContent: 'center' },
+  sellerBackground: { width: '100%', height: height, justifyContent: 'center' },
   sellerOverlay: { ...StyleSheet.absoluteFillObject },
   sellerContent: { alignItems: 'center', paddingHorizontal: 24, zIndex: 10 },
   sellerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },

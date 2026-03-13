@@ -27,11 +27,8 @@ export default function ProfileIndex() {
           .eq('id', session.user.id)
           .maybeSingle();
 
-        if (data?.is_seller === true) {
-          router.replace('/(tabs)/Profile/seller');
-          return;
-        }
-
+        // Always land on the buyers view first so sellers can see the seller section
+        // and explicitly tap "Open Seller Dashboard" to navigate to the seller page.
         router.replace('/(tabs)/Profile/buyers');
       } catch {
         router.replace('/(tabs)/Profile/buyers');
